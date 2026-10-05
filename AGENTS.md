@@ -44,6 +44,7 @@ If the installer says Python 3 is missing, ask the user to run `xcode-select --i
 | `clean --yes` | Skips the confirmation. Never removes launch agents or files inside the user's projects; those are skipped with a message. |
 | `backup` with no TTY on stdin | The encrypted DMG step is skipped (it needs a password). Pass `--no-dmg` to make this explicit. |
 | `backup --yes`, items larger than 2 GB (usually the Cowork VM) | Skipped unless `--include-big`. `clean` still removes them. |
+| `backup`, apps / binaries / caches / logs / telemetry / embedded-browser login state | Never archived (re-downloadable or regenerated). `clean` still removes them. |
 | System-wide crash reports | Need `sudo`; without a TTY the attempt fails harmlessly. |
 
 Progress messages go to **stderr**; results go to **stdout**.

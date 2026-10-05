@@ -5,7 +5,7 @@
 See what Claude (the desktop app, Claude Code and Cowork) has left on your Mac that can identify **you, your device and your account** — and clean it up safely if you want to.
 
 - **Check**: finds account and device IDs, tracking cookies, the hardware / environment profile that gets reported, usage patterns, and whether telemetry is switched off. Gives you a score and a report.
-- **Back up**: archives everything before touching it (optionally into an encrypted disk image).
+- **Back up**: archives sessions, config and credentials before touching anything (optionally into an encrypted disk image); apps, caches and logs that can be re-downloaded or are regenerated are skipped.
 - **Clean**: removes every Claude trace in one go, after showing you the full list and asking for confirmation.
 
 > **Unofficial tool.** Not affiliated with, endorsed by, or supported by Anthropic. "Claude" is a trademark of Anthropic.
@@ -101,7 +101,7 @@ Reports, backups and logs are written to `reports/`, `backups/` and `logs/` insi
 
 ## Restore from a backup
 
-Each backup folder has a `HOW_TO_RESTORE.txt`. In short: quit Claude, then in Terminal run `tar -xzf <archive>.tar.gz -C /` for the archive you need. Keychain passwords are never exported, so you sign in again after restoring.
+Each backup folder has a `HOW_TO_RESTORE.txt`. In short: quit Claude, then in Terminal run `tar -xzf <archive>.tar.gz -C /` for the archive you need. Keychain passwords are never exported, so you sign in again after restoring. To start with a fresh identity, restore only what you need (sessions, config) and leave the identity & credentials archive out.
 
 ## All commands
 
