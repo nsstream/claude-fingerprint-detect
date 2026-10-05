@@ -378,7 +378,7 @@ ITEMS = [
     # D Cowork
     item("D1", "D", 1, T("Cowork VM images & session data disk (unencrypted, contains copies of secrets)"),
          paths=[AS + "/vm_bundles"], note=T("Usually several GB; holds the VM UUID / MAC address")),
-    item("D2", "D", 2, T("Claude Code VM runtime"), paths=[AS + "/claude-code-vm"]),
+    item("D2", "D", 2, T("Claude Code VM runtime"), paths=[AS + "/claude-code-vm"], nobackup=True),
 
     # E embedded browser
     item("E1", "E", 1, T("Desktop app cookies & site storage (login state, ajs_*, analytics IDs)"),
@@ -389,7 +389,7 @@ ITEMS = [
                 AS + "/shared_proto_db", AS + "/Local State", AS + "/Preferences"]),
     item("E2", "E", 3, T("Desktop app caches (HTTP / code / GPU)"),
          paths=[AS + "/Cache", AS + "/Code Cache", AS + "/GPUCache", AS + "/DawnGraphiteCache",
-                AS + "/DawnWebGPUCache", AS + "/VideoDecodeStats", AS + "/fcache"]),
+                AS + "/DawnWebGPUCache", AS + "/VideoDecodeStats", AS + "/fcache"], nobackup=True),
 
     # F config
     item("F1", "F", 1, T("MCP configs and their backups (may contain third-party tokens)"),
@@ -406,14 +406,16 @@ ITEMS = [
 
     # G application files
     item("G1", "G", 3, T("Claude desktop application"), paths=["/Applications/Claude.app",
-                                                            "~/Applications/Claude Code URL Handler.app"]),
+                                                            "~/Applications/Claude Code URL Handler.app"],
+         nobackup=True),
     item("G2", "G", 3, T("Claude Code binaries & state"),
          paths=["~/.local/bin/claude", "~/.local/share/claude", "~/.local/state/claude", "~/.cache/claude",
-                AS + "/claude-code"]),
+                AS + "/claude-code"], nobackup=True),
     item("G3", "G", 3, T("Application caches & temp files"), paths=["~/Library/Caches/claude-cli-nodejs",
                                                                  "~/Library/Caches/com.anthropic.*",
                                                                  "/private/tmp/claude-mcp-browser-bridge-*",
-                                                                 TMP + "/claude*", TMP + "/*anthropic*"]),
+                                                                 TMP + "/claude*", TMP + "/*anthropic*"],
+         nobackup=True),
     item("G4", "G", 2, T("Remove leftover directories entirely (~/.claude, desktop app data dir, Claude-3p)"),
          paths=["~/.claude", AS, "~/Library/Application Support/Claude-3p"],
          note=T("Catch-all item, always runs last"), last=True),
@@ -765,10 +767,14 @@ def do_backup(items, scan=None):
             return False
         return True
 
-    by_cat, sizes, covered, skipped = {}, {}, [], []
+    by_cat, sizes, covered, skipped, not_needed = {}, {}, [], [], 0
     for it in items:
         targets, size, _ = scan[it["id"]]
         if not targets or it.get("last"):
+            continue
+        if it.get("nobackup"):
+            skipped += targets
+            not_needed += size
             continue
         if it["kind"] == "history":
             size = sum(du(t) for t in targets)
@@ -811,6 +817,8 @@ def do_backup(items, scan=None):
         row(label, (T("1 path") if n == 1 else T("%d paths") % n) + ", " + BOLD(human(size)))
     if kc:
         row(T("Keychain"), T("entry metadata only"))
+    if not_needed:
+        row(DIM(T("Not backed up: apps, programs, caches (re-downloadable)")), DIM(human(not_needed)))
     total = sum(j[4] for j in jobs)
     free = shutil.disk_usage(TOOL_DIR).free
     print()

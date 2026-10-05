@@ -543,4 +543,5 @@ ZH = {
     "entry metadata only": "仅条目元数据",
     "\nexamples:\n  %(prog)s check     fingerprint check (read-only)\n  %(prog)s backup    back up every Claude trace to backups/\n  %(prog)s clean     remove every Claude trace (lists everything and asks first)\n\nRun without arguments for the interactive menu.\n": "\n示例：\n  %(prog)s check     指纹体检（只读）\n  %(prog)s backup    把所有 Claude 痕迹备份到 backups/\n  %(prog)s clean     清除所有 Claude 痕迹（先列出全部内容并确认）\n\n不带参数运行进入交互菜单。\n",
     "Everything else in the Claude folders": "Claude 目录里的其余文件",
+    "Not backed up: apps, programs, caches (re-downloadable)": "不备份：应用、程序、缓存（可重新下载）",
 }
