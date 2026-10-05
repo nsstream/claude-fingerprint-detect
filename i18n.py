@@ -270,7 +270,6 @@ ZH = {
     "project scan root, may be repeated": "项目扫描目录，可重复指定",
     "look for leftovers": "检查残留",
     "manual checklist": "手动事项清单",
-    "UI language: en, zh or auto (follow macOS)": "界面语言：en、zh 或 auto（跟随 macOS）",
     "\nFound %d / %d items, %s in total": "\n发现 %d / %d 项，共 %s",
     "Skipped the encrypted DMG: it needs a password typed in a terminal (pass --no-dmg to silence this).":
         "已跳过加密 DMG：它需要在终端中输入密码（加 --no-dmg 可不再提示）。",
@@ -496,7 +495,6 @@ ZH = {
     'fingerprint check (read-only)': '指纹体检（只读）',
     'list every location that would be cleaned, with sizes': '列出所有会被清理的位置及大小',
     'remove every Claude trace': '清除所有 Claude 痕迹',
-    '\nexamples:\n  %(prog)s check     fingerprint check (read-only)\n  %(prog)s backup    back up every Claude trace to backups/\n  %(prog)s clean     remove every Claude trace (lists everything and asks first)\n\nRun without arguments for the interactive menu.\nLanguage: --lang en|zh|auto (default auto: follows the macOS preferred language; CFD_LANG also works).\n': '\n示例：\n  %(prog)s check     指纹体检（只读）\n  %(prog)s backup    把所有 Claude 痕迹备份到 backups/\n  %(prog)s clean     清除所有 Claude 痕迹（先列出全部内容并确认）\n\n不带参数运行进入交互菜单。\n语言：--lang en|zh|auto（默认 auto：跟随 macOS 首选语言；也可用 CFD_LANG）。\n',
     " and %d more places": "，另有 %d 处",
     "Claude Fingerprint Detect": "Claude 指纹检测",
     "Fingerprint exposure score": "指纹暴露得分",
@@ -543,4 +541,5 @@ ZH = {
     "Keychain": "钥匙串",
     "Total before compression": "压缩前合计",
     "entry metadata only": "仅条目元数据",
+    "\nexamples:\n  %(prog)s check     fingerprint check (read-only)\n  %(prog)s backup    back up every Claude trace to backups/\n  %(prog)s clean     remove every Claude trace (lists everything and asks first)\n\nRun without arguments for the interactive menu.\n": "\n示例：\n  %(prog)s check     指纹体检（只读）\n  %(prog)s backup    把所有 Claude 痕迹备份到 backups/\n  %(prog)s clean     清除所有 Claude 痕迹（先列出全部内容并确认）\n\n不带参数运行进入交互菜单。\n",
 }

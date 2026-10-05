@@ -113,11 +113,10 @@ cfd clean                  # remove everything
 cfd scan -v                # see every location that would be cleaned
 cfd verify                 # look for leftovers
 cfd manual                 # manual checklist
-cfd --lang zh check        # force a language (en | zh | auto)
 cfd --help
 ```
 
-`clean --yes` skips the confirmation but never removes launch agents or files inside your projects. Set `CFD_LANG=zh` or `CFD_LANG=en` to fix the language. Automation and AI agents: see [AGENTS.md](AGENTS.md).
+`clean --yes` skips the confirmation but never removes launch agents or files inside your projects. Automation and AI agents: see [AGENTS.md](AGENTS.md).
 
 **Update**: run the install command again. **Uninstall**:
 

@@ -1225,7 +1225,6 @@ examples:
   %(prog)s clean     remove every Claude trace (lists everything and asks first)
 
 Run without arguments for the interactive menu.
-Language: --lang en|zh|auto (default auto: follows the macOS preferred language; CFD_LANG also works).
 """)
 
 
@@ -1235,7 +1234,7 @@ def cli(argv):
                                  description=T("Claude local fingerprint check, backup and clean (macOS)"),
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=CLI_EPILOG)
     ap.add_argument("--version", action="version", version="claude-fingerprint-detect " + __version__)
-    ap.add_argument("--lang", choices=["en", "zh", "auto"], help=T("UI language: en, zh or auto (follow macOS)"))
+    ap.add_argument("--lang", choices=["en", "zh", "auto"], help=argparse.SUPPRESS)
     sub = ap.add_subparsers(dest="cmd")
 
     p = sub.add_parser("check", help=T("fingerprint check (read-only)"))

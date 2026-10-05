@@ -113,11 +113,10 @@ cfd clean                  # 全部清理
 cfd scan -v                # 查看会被清理的所有位置
 cfd verify                 # 检查残留
 cfd manual                 # 手动事项清单
-cfd --lang en check        # 指定语言（en | zh | auto）
 cfd --help
 ```
 
-`clean --yes` 跳过确认，但不会删除启动项和项目中的文件。设置环境变量 `CFD_LANG=zh` 或 `CFD_LANG=en` 可固定语言。自动化脚本和 AI agent 请看 [AGENTS.md](AGENTS.md)。
+`clean --yes` 跳过确认，但不会删除启动项和项目中的文件。自动化脚本和 AI agent 请看 [AGENTS.md](AGENTS.md)。
 
 **更新**：再运行一次安装命令。**卸载**：
 
