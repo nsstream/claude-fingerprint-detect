@@ -5,9 +5,11 @@ set -euo pipefail
 
 REPO="https://github.com/nsstream/claude-fingerprint-detect"
 NAME="claude-fingerprint-detect"
+CMD="cfd"
 DIR="${CFD_HOME:-$HOME/.claude-fingerprint-detect}"
 BIN_DIR="${CFD_BIN_DIR:-$HOME/.local/bin}"
-BIN="$BIN_DIR/$NAME"
+BIN="$BIN_DIR/$CMD"
+OLD_BIN="$BIN_DIR/$NAME"
 PATH_LINE="export PATH=\"$BIN_DIR:\$PATH\""
 
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -23,7 +25,7 @@ rc_file() {
 }
 
 if [ "${1:-}" = "--uninstall" ]; then
-  rm -f "$BIN"
+  rm -f "$BIN" "$OLD_BIN"
   echo "Removed $BIN"
   if [ -d "$DIR/backups" ] || [ -d "$DIR/reports" ]; then
     echo "Kept $DIR because it contains backups/ or reports/. Delete it yourself when you no longer need them:"
@@ -53,9 +55,10 @@ else
 fi
 
 mkdir -p "$BIN_DIR"
+rm -f "$OLD_BIN"
 cat > "$BIN" <<EOF
 #!/bin/bash
-CFD_PROG="$NAME" exec /usr/bin/python3 "$DIR/claude_fingerprint_detect.py" "\$@"
+CFD_PROG="$CMD" exec /usr/bin/python3 "$DIR/claude_fingerprint_detect.py" "\$@"
 EOF
 chmod 755 "$BIN"
 
@@ -78,7 +81,7 @@ if [ "$ON_PATH" = 0 ]; then
 else
   echo "Run:"
 fi
-echo "  $NAME check     # fingerprint check (read-only)"
-echo "  $NAME backup    # back up every Claude trace"
-echo "  $NAME clean     # remove every Claude trace"
-echo "  $NAME           # interactive menu"
+echo "  $CMD check     # fingerprint check (read-only)"
+echo "  $CMD backup    # back up every Claude trace"
+echo "  $CMD clean     # remove every Claude trace"
+echo "  $CMD           # interactive menu"

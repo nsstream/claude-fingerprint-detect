@@ -12,7 +12,7 @@
 
 ## 快速开始
 
-在终端里安装 `claude-fingerprint-detect` 命令（装到 `~/.claude-fingerprint-detect`，不碰其他任何东西）：
+在终端里安装 `cfd` 命令（装到 `~/.claude-fingerprint-detect`，不碰其他任何东西）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash
@@ -21,12 +21,12 @@ curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/
 然后打开一个新的终端窗口：
 
 ```bash
-claude-fingerprint-detect check    # 1. 指纹体检（只读）
-claude-fingerprint-detect backup   # 2. 备份
-claude-fingerprint-detect clean    # 3. 清理（先列出要删除的内容，确认后才执行）
+cfd check    # 1. 指纹体检（只读）
+cfd backup   # 2. 备份
+cfd clean    # 3. 清理（先列出要删除的内容，确认后才执行）
 ```
 
-不带参数运行 `claude-fingerprint-detect` 会进入交互菜单。界面语言跟随 Mac 的系统语言（简体中文或英文）。
+不带参数运行 `cfd` 会进入交互菜单。界面语言跟随 Mac 的系统语言（简体中文或英文）。
 
 用 AI agent？直接对它说：
 
@@ -46,9 +46,9 @@ claude-fingerprint-detect clean    # 3. 清理（先列出要删除的内容，�
 
 ## 推荐步骤
 
-1. `claude-fingerprint-detect check`：需要几分钟。每条发现都会说明为什么重要。
-2. `claude-fingerprint-detect backup`，然后 `claude-fingerprint-detect clean`：列出将删除的全部内容，确认后清理，最后自动验证。
-3. `claude-fingerprint-detect manual`：处理工具在本地做不到的部分（浏览器扩展、手机 App、Time Machine、轮换泄露的密钥）。
+1. `cfd check`：需要几分钟。每条发现都会说明为什么重要。
+2. `cfd backup`，然后 `cfd clean`：列出将删除的全部内容，确认后清理，最后自动验证。
+3. `cfd manual`：处理工具在本地做不到的部分（浏览器扩展、手机 App、Time Machine、轮换泄露的密钥）。
 
 **清理前须知**
 
@@ -112,15 +112,15 @@ claude-fingerprint-detect clean    # 3. 清理（先列出要删除的内容，�
 ## 全部命令
 
 ```bash
-claude-fingerprint-detect check                  # 指纹体检
-claude-fingerprint-detect check --extra --save   # 加凭据、密钥泄露、系统防护，并保存报告
-claude-fingerprint-detect backup                 # 全部备份
-claude-fingerprint-detect clean                  # 全部清理
-claude-fingerprint-detect scan -v                # 查看会被清理的所有位置
-claude-fingerprint-detect verify                 # 检查残留
-claude-fingerprint-detect manual                 # 手动事项清单
-claude-fingerprint-detect --lang en check        # 指定语言（en | zh | auto）
-claude-fingerprint-detect --help
+cfd check                  # 指纹体检
+cfd check --extra --save   # 加凭据、密钥泄露、系统防护，并保存报告
+cfd backup                 # 全部备份
+cfd clean                  # 全部清理
+cfd scan -v                # 查看会被清理的所有位置
+cfd verify                 # 检查残留
+cfd manual                 # 手动事项清单
+cfd --lang en check        # 指定语言（en | zh | auto）
+cfd --help
 ```
 
 `clean --yes` 跳过确认，但不会删除启动项和项目中的文件。设置环境变量 `CFD_LANG=zh` 或 `CFD_LANG=en` 可固定语言。自动化脚本和 AI agent 请看 [AGENTS.md](AGENTS.md)。

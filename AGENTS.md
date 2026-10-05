@@ -16,10 +16,10 @@ A macOS command-line tool that finds what Claude (desktop app, Claude Code, Cowo
 curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash
 ```
 
-This puts the code in `~/.claude-fingerprint-detect` and a `claude-fingerprint-detect` command in `~/.local/bin` (added to `PATH` in `~/.zshrc` or `~/.bash_profile` if needed). Running it again updates. Your current shell may not see the new `PATH`, so call the full path:
+This puts the code in `~/.claude-fingerprint-detect` and a `cfd` command in `~/.local/bin` (added to `PATH` in `~/.zshrc` or `~/.bash_profile` if needed). Running it again updates. Your current shell may not see the new `PATH`, so call the full path:
 
 ```bash
-~/.local/bin/claude-fingerprint-detect --version
+~/.local/bin/cfd --version
 ```
 
 Uninstall: `curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash -s -- --uninstall` (keeps the folder if it holds backups or reports).
@@ -50,7 +50,7 @@ Progress messages go to **stderr**; results go to **stdout**.
 
 ## Commands
 
-All commands: `~/.local/bin/claude-fingerprint-detect <command> [options] [--lang en|zh|auto]`
+All commands: `~/.local/bin/cfd <command> [options] [--lang en|zh|auto]`
 
 | Command | Purpose | Typical runtime |
 | --- | --- | --- |
@@ -69,7 +69,7 @@ Exit codes: `0` success, `1` backup was not created.
 When the user asks to "check / clean my Claude fingerprints":
 
 ```bash
-P=~/.local/bin/claude-fingerprint-detect
+P=~/.local/bin/cfd
 
 # 1. Check (read-only). Summarize the score and HIGH findings for the user.
 $P check --json --lang en > /tmp/cfd_check.json

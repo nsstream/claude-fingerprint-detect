@@ -12,7 +12,7 @@ See what Claude (the desktop app, Claude Code and Cowork) has left on your Mac t
 
 ## Quick start
 
-Install the `claude-fingerprint-detect` command in Terminal (into `~/.claude-fingerprint-detect`, nothing else is touched):
+Install the `cfd` command in Terminal (into `~/.claude-fingerprint-detect`, nothing else is touched):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash
@@ -21,12 +21,12 @@ curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/
 Then, in a new terminal window:
 
 ```bash
-claude-fingerprint-detect check    # 1. fingerprint check (read-only)
-claude-fingerprint-detect backup   # 2. back up
-claude-fingerprint-detect clean    # 3. clean (shows what will be removed and asks first)
+cfd check    # 1. fingerprint check (read-only)
+cfd backup   # 2. back up
+cfd clean    # 3. clean (shows what will be removed and asks first)
 ```
 
-Run `claude-fingerprint-detect` with no arguments for an interactive menu. The interface follows your Mac's language (English or Simplified Chinese).
+Run `cfd` with no arguments for an interactive menu. The interface follows your Mac's language (English or Simplified Chinese).
 
 Using an AI agent? Ask it:
 
@@ -46,9 +46,9 @@ Using an AI agent? Ask it:
 
 ## Recommended steps
 
-1. `claude-fingerprint-detect check`. Takes a few minutes. Each finding says why it matters.
-2. `claude-fingerprint-detect backup`, then `claude-fingerprint-detect clean`: lists everything that will be removed, cleans after you confirm, then verifies.
-3. `claude-fingerprint-detect manual` for things the tool cannot do locally (browser extension, phone app, Time Machine, rotating leaked keys).
+1. `cfd check`. Takes a few minutes. Each finding says why it matters.
+2. `cfd backup`, then `cfd clean`: lists everything that will be removed, cleans after you confirm, then verifies.
+3. `cfd manual` for things the tool cannot do locally (browser extension, phone app, Time Machine, rotating leaked keys).
 
 **Good to know before cleaning**
 
@@ -112,15 +112,15 @@ Each backup folder has a `HOW_TO_RESTORE.txt`. In short: quit Claude, then in Te
 ## All commands
 
 ```bash
-claude-fingerprint-detect check                  # fingerprint check
-claude-fingerprint-detect check --extra --save   # + credentials, secret leaks, system protection; save report
-claude-fingerprint-detect backup                 # back up everything
-claude-fingerprint-detect clean                  # remove everything
-claude-fingerprint-detect scan -v                # see every location that would be cleaned
-claude-fingerprint-detect verify                 # look for leftovers
-claude-fingerprint-detect manual                 # manual checklist
-claude-fingerprint-detect --lang zh check        # force a language (en | zh | auto)
-claude-fingerprint-detect --help
+cfd check                  # fingerprint check
+cfd check --extra --save   # + credentials, secret leaks, system protection; save report
+cfd backup                 # back up everything
+cfd clean                  # remove everything
+cfd scan -v                # see every location that would be cleaned
+cfd verify                 # look for leftovers
+cfd manual                 # manual checklist
+cfd --lang zh check        # force a language (en | zh | auto)
+cfd --help
 ```
 
 `clean --yes` skips the confirmation but never removes launch agents or files inside your projects. Set `CFD_LANG=zh` or `CFD_LANG=en` to fix the language. Automation and AI agents: see [AGENTS.md](AGENTS.md).
