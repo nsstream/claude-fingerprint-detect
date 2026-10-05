@@ -254,7 +254,10 @@ def sec_ids(r, cc, ids, dist):
              T("Cowork VM machineIdentifier"): ["D1"], T("hardware UUID"): ["H1", "C4"]}
     lvl_of = {T("account"): 1, T("device"): 1, T("hardware"): 2, T("local"): 2}
     for (cat, name, val, src), d in zip(ids, dist):
-        where = ", ".join(T("%s x%d") % (g, n) for g, n in d.most_common()) or T("only in its source file")
+        top = d.most_common()
+        where = ", ".join(T("%s x%d") % (g, n) for g, n in top[:4]) or T("only in its source file")
+        if len(top) > 4:
+            where += T(" and %d more places") % (len(top) - 4)
         total = sum(d.values())
         text = T("[%s] %s = %s\n            persistence: %s; found in %d files: %s") % (cat, name, val, persist[cat], total, where)
         if name == T("hardware UUID"):
@@ -282,16 +285,19 @@ def sec_cookies(r, cc):
         if not rows:
             continue
         by_lvl = collections.defaultdict(list)
+        names = collections.defaultdict(list)
         for host, name, exp in rows:
             lvl, desc = cookie_label(name)
             by_lvl[lvl].append(T("%s %s (%s, until %s)") % (host, name, desc, (exp or "")[:10]))
+            if name not in names[lvl]:
+                names[lvl].append(name)
         hi, mid, lo = by_lvl.get(1, []), by_lvl.get(2, []), by_lvl.get(3, [])
         r.risk(1 if hi else 2, T("%s: %d cookies; %d identity / device IDs, %d third-party tracking & risk control, %d other")
                % (label, len(rows), len(hi), len(mid), len(lo)), "", [iid])
         for line in hi:
             r.info("    ● " + line)
-        for line in mid:
-            r.info("    ○ " + line)
+        if mid:
+            r.info("    ○ " + T("third-party tracking & risk control: %s") % ", ".join(names[2]))
     r.info(T("Note: anthropic-device-id / ajs_anonymous_id exist in both the desktop app and Chrome; once both sign in to "
            "the same account they are linked. Risk-control cookies such as cf_clearance and __stripe_mid are bound to "
            "the browser environment fingerprint."))
@@ -438,7 +444,6 @@ def sec_reporting(r, cc, check_telemetry):
 
 def run_fingerprint(r, cc, check_telemetry):
     ids = collect_ids()
-    cc.sys.stderr.write(cc.DIM(T("  Counting where each identifier appears (skipping files over 30 MB and VM images)...\n")))
     dist, nfiles, secs = distribution(ids, cc)
     sec_ids(r, cc, ids, dist)
     r.info(T("(checked %d files in %.0f s)") % (nfiles, secs))

@@ -29,7 +29,8 @@ i18n.init(sys.argv)
 __version__ = "1.1.0"
 HOME = os.path.expanduser("~")
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
-PROG = os.environ.get("CFD_PROG") or "python3 " + os.path.abspath(__file__).replace(HOME, "~")
+PROG = (os.environ.get("CFD_PROG") or ("cfd" if shutil.which("cfd") else "")
+        or "python3 " + os.path.abspath(__file__).replace(HOME, "~"))
 BACKUP_ROOT = os.path.join(TOOL_DIR, "backups")
 LOG_ROOT = os.path.join(TOOL_DIR, "logs")
 REPORT_ROOT = os.path.join(TOOL_DIR, "reports")
@@ -107,7 +108,10 @@ def confirm(prompt, default=False):
         print(T("%s [auto: yes]") % prompt)
         return True
     hint = "[Y/n]" if default else "[y/N]"
-    s = ask("%s %s " % (prompt, hint)).lower()
+    body = prompt.lstrip("\n")
+    s = ask(prompt[:len(prompt) - len(body)] + CYAN("? ") + body + " " + DIM(hint) + " ").lower()
+    if _stdin_closed:
+        return False
     if not s:
         return default
     return s in ("y", "yes")
@@ -144,6 +148,101 @@ def clip(s, width):
             return out + "…"
         out += ch
     return s
+
+
+ANSI = re.compile(r"\033\[[0-9;]*m")
+_WRAP_TOKEN = re.compile(r"\033\[[0-9;]*m|[^\s\u2e80-\uffff]+\s*|\s+|.")
+
+
+def visible_width(s):
+    return text_width(ANSI.sub("", s))
+
+
+def term_width():
+    return max(40, min(shutil.get_terminal_size((100, 20)).columns - 1, 110))
+
+
+def wrap(text, width, hard=False):
+    """Wrap one paragraph to a display width: Latin words stay whole, CJK breaks anywhere, ANSI codes are free.
+    hard=True breaks at the width regardless of spaces (for paths)."""
+    if hard:
+        lines = []
+        while text_width(text) > width:
+            head = clip(text, width - 1)[:-1]
+            lines.append(head)
+            text = text[len(head):]
+        return lines + [text]
+    lines, cur, w = [], "", 0
+    for tok in _WRAP_TOKEN.findall(text):
+        if tok.startswith("\033"):
+            cur += tok
+            continue
+        tw = text_width(tok)
+        if w + tw > width and w:
+            lines.append(cur.rstrip())
+            cur, w = "", 0
+            tok = tok.lstrip()
+            tw = text_width(tok)
+        while tw > width:
+            head = clip(tok, width - 1)[:-1]
+            lines.append(head)
+            tok = tok[len(head):]
+            tw = text_width(tok)
+        cur += tok
+        w += tw
+    lines.append(cur.rstrip())
+    return lines
+
+
+def emit(text, indent=0, first="", color=None, hard=False):
+    """Print text wrapped to the terminal; `first` replaces the indent on the first line."""
+    width = term_width() - indent
+    pad = " " * indent
+    for n, para in enumerate(text.split("\n")):
+        for m, line in enumerate(wrap(para.strip(), width, hard)):
+            lead = first if (n == 0 and m == 0 and first) else pad
+            print(lead + (color(line) if color else line))
+
+
+def box(lines, width=None):
+    width = width or min(term_width(), 72)
+    inner = width - 4
+    print(DIM("╭" + "─" * (width - 2) + "╮"))
+    for line in lines:
+        print(DIM("│ ") + line + " " * max(0, inner - visible_width(line)) + DIM(" │"))
+    print(DIM("╰" + "─" * (width - 2) + "╯"))
+
+
+def heading(title, sub=""):
+    print("\n" + BOLD(CYAN("▍" + title)))
+    if sub:
+        emit(sub, 2, color=DIM)
+    print(DIM("  " + "─" * (term_width() - 2)))
+
+
+def row(left, right="", indent=2):
+    """`left ······ right`, right-aligned to the terminal width."""
+    width = term_width()
+    room = width - indent - visible_width(right) - 6
+    if visible_width(left) > room:
+        left = clip(ANSI.sub("", left), room)
+    gap = width - indent - visible_width(left) - visible_width(right)
+    print(" " * indent + left + (" " + DIM("·" * (gap - 2)) + " " if right else "") + right)
+
+
+def menu(rows, prompt_default=""):
+    """rows: (key, label, description). Returns the answer."""
+    lw = max(text_width(r[1]) for r in rows)
+    print()
+    for key, label, desc in rows:
+        print("  " + BOLD(CYAN(key)) + "  " + label + (" " * (lw - text_width(label) + 3) + DIM(desc) if desc else ""))
+    return ask("\n" + CYAN("› "), prompt_default)
+
+
+def badge(level):
+    word = {1: T("HIGH"), 2: T("MED"), 3: T("LOW")}[level]
+    word = " %s " % (word + " " * (4 - text_width(word)))
+    return c(word, {1: "1;97;41", 2: "1;30;43", 3: "30;47"}[level])
 
 
 class Progress:
@@ -596,24 +695,22 @@ def print_catalog(items=None, scan=None):
     for it in items:
         if it["cat"] != cur:
             cur = it["cat"]
-            print("\n" + BOLD(CAT_NAME[cur]))
-        line = "  " + it["name"]
-        if scan is not None:
-            targets, size, desc = scan[it["id"]]
-            if has_content(it, targets, desc):
-                extra = []
-                if targets:
-                    extra.append(T("%d paths") % len(targets))
-                if size:
-                    extra.append(human(size))
-                if desc and not targets:
-                    extra.append(T("%d hits") % len(desc))
-                line += "  " + GREEN("● " + ", ".join(extra))
-            else:
-                line += "  " + DIM(T("○ not found"))
-        print(line)
-        if it.get("note"):
-            print("        " + DIM(it["note"]))
+            heading(CAT_NAME[cur])
+        if scan is None:
+            row(it["name"])
+            continue
+        targets, size, desc = scan[it["id"]]
+        if has_content(it, targets, desc):
+            extra = []
+            if targets:
+                extra.append(T("1 path") if len(targets) == 1 else T("%d paths") % len(targets))
+            if desc and not targets:
+                extra.append(T("%d hits") % len(desc))
+            if size:
+                extra.append(BOLD(human(size)))
+            row(YELLOW("● ") + it["name"], ", ".join(extra))
+        else:
+            row(DIM("○ " + it["name"]), DIM(T("○ not found")))
 
 
 def scan_all(items=None):
@@ -677,18 +774,23 @@ def do_backup(items, scan=None):
         print(YELLOW(T("No Claude traces found on this Mac; nothing to back up.")))
         return None
 
-    print(BOLD(T("\nBackup plan (destination: %s)") % dest.replace(HOME, "~")))
+    heading(T("Backup plan"), T("Destination: %s") % dest.replace(HOME, "~"))
     for cat, ps in sorted(by_cat.items()):
-        print(T("  [%s] %s: %d paths, about %s") % (cat, CAT_NAME[cat], len(dedupe(ps)), human(sizes.get(cat, 0))))
+        n = len(dedupe(ps))
+        row(CAT_NAME[cat], (T("1 path") if n == 1 else T("%d paths") % n) + ", " + BOLD(human(sizes.get(cat, 0))))
     if kc:
-        print(T("  Keychain: entry metadata only"))
+        row(T("Keychain"), T("entry metadata only"))
     total = sum(sizes.values())
     free = shutil.disk_usage(TOOL_DIR).free
-    print(T("  Total about %s before compression, %s free on disk") % (human(total), human(free)))
+    print()
+    row(BOLD(T("Total before compression")), BOLD(human(total)))
+    row(T("Free disk space"), (RED if total > free * 0.9 else GREEN)(human(free)))
     if total > free * 0.9:
-        print(RED(T("Disk space may be insufficient.")))
+        print("  " + RED(T("Disk space may be insufficient.")))
+    print()
     if not confirm(T("Start the backup?"), True):
         return None
+    heading(T("Backing up"))
 
     os.makedirs(dest, exist_ok=True)
     manifest = {"created": ts, "host_user": getpass.getuser(), "archives": {}}
@@ -700,8 +802,13 @@ def do_backup(items, scan=None):
         with open(listfile, "w", encoding="utf-8") as f:
             for p in paths:
                 f.write(p.lstrip("/") + "\n")
-        print(T("  Archiving [%s] %s ...") % (cat, CAT_NAME[cat]))
+        if sys.stdout.isatty():
+            sys.stdout.write("  " + DIM("… " + CAT_NAME[cat]))
+            sys.stdout.flush()
         rc, out = run(["tar", "-czf", archive, "-C", "/", "-T", listfile], sudo=sudo)
+        if sys.stdout.isatty():
+            sys.stdout.write("\r\033[K")
+        row((GREEN("✓ ") if rc == 0 else YELLOW("! ")) + CAT_NAME[cat], human(du(archive)) if os.path.exists(archive) else "")
         manifest["archives"][os.path.basename(archive)] = {"category": CAT_NAME[cat], "paths": paths,
                                                           "tar_rc": rc}
         if rc != 0:
@@ -722,7 +829,8 @@ def do_backup(items, scan=None):
     os.chmod(dest, 0o700)
     for n in os.listdir(dest):
         os.chmod(os.path.join(dest, n), 0o600)
-    log(GREEN(T("Backup finished: %s (%s)") % (dest, human(du(dest)))))
+    print()
+    log(BOLD(GREEN("✓ " + T("Backup finished: %s (%s)") % (dest.replace(HOME, "~"), human(du(dest))))))
 
     if SETTINGS["dmg"] and not sys.stdin.isatty():
         log(YELLOW(T("Skipped the encrypted DMG: it needs a password typed in a terminal (pass --no-dmg to silence this).")))
@@ -916,30 +1024,34 @@ def do_clean(items, scan=None):
         return
     todo.sort(key=lambda it: (bool(it.get("last")), it["id"]))
 
-    print(BOLD(T("\nClean preview:")))
-    total = 0
-    for it in todo:
+    total, cur = 0, None
+    for it in sorted(todo, key=lambda it: it["id"]):
         targets, size, desc = scan[it["id"]]
         total += size
-        print("\n  %s  %s" % (it["name"], human(size) if size else ""))
-        for t in targets[:8]:
-            print("      " + DIM(t.replace(HOME, "~")))
-        if len(targets) > 8:
-            print("      " + DIM(T("... and %d more") % (len(targets) - 8)))
-        for d in desc[:8]:
-            print("      " + DIM(d))
-    mode = T("move to Trash") if SETTINGS["delete_mode"] == "trash" else T("delete permanently (cannot be undone)")
-    print(T("\nTotal about %s, deletion mode: %s") % (human(total), mode))
+        if it["cat"] != cur:
+            cur = it["cat"]
+            heading(CAT_NAME[cur])
+        row(RED("✗ ") + it["name"], BOLD(human(size)) if size else "")
+        for t in (targets or desc)[:3]:
+            emit(t.replace(HOME, "~"), 6, color=DIM, hard=True)
+        more = len(targets or desc) - 3
+        if more > 0:
+            print("      " + DIM(T("... and %d more") % more))
+    mode = T("move to Trash") if SETTINGS["delete_mode"] == "trash" else RED(T("delete permanently (cannot be undone)"))
+    print()
+    box([BOLD(RED(T("About to remove everything above, including the Claude apps"))),
+         "",
+         T("  Items: %d    Size: %s    Mode: %s") % (len(todo), BOLD(human(total)), mode)])
 
-    if not SETTINGS["assume_yes"] and ask(RED(T("Type DELETE to clean everything above: "))) != "DELETE":
-        print(T("Cancelled."))
+    if not SETTINGS["assume_yes"] and ask("\n" + T("Type %s to continue, anything else cancels: ") % BOLD(RED("DELETE"))) != "DELETE":
+        print(DIM(T("Cancelled. Nothing was deleted.")))
         return
 
     stop_processes()
-    log(BOLD(T("Cleaning started (%s)") % mode))
+    heading(T("Cleaning"))
     for it in todo:
         targets, _, desc = scan[it["id"]]
-        log(CYAN("▶ " + it["name"]))
+        log(BOLD(CYAN("▶ ") + it["name"]))
         k = it["kind"]
         if k == "path":
             for t in targets:
@@ -967,7 +1079,8 @@ def do_clean(items, scan=None):
             for d in desc:
                 print("    " + d)
     _size_cache.clear()
-    log(GREEN(T("Cleaning finished.")))
+    print()
+    log(BOLD(GREEN("✓ " + T("Cleaning finished."))))
     return True
 
 # ───────────────────────── verify ─────────────────────────
@@ -975,26 +1088,28 @@ def do_verify():
     _size_cache.clear()
     scan = scan_all()
     left = [it for it in ITEMS if has_content(it, scan[it["id"]][0], scan[it["id"]][2])]
+    heading(T("Verify"))
     if not left:
-        log(GREEN(T("Verification passed: no leftovers at any known risk location.")))
+        log(GREEN("✓ " + T("Verification passed: no leftovers at any known risk location.")))
     else:
         log(YELLOW(T("%d items still have leftovers:") % len(left)))
         print_catalog(left, scan)
     rc, out = run(["security", "dump-keychain"])
     n = len([l for l in out.splitlines() if re.search(r"claude|anthropic", l, re.I)])
-    print(T("\nKeychain matching lines: %d") % n)
     procs = claude_processes()
-    print(T("Running Claude-related processes: %d") % len(procs))
+    snaps = run(["tmutil", "listlocalsnapshots", "/"])[1].strip().splitlines()
+    print()
+    row(T("Keychain matching lines"), (GREEN if not n else YELLOW)(str(n)))
+    row(T("Running Claude-related processes"), (GREEN if not procs else YELLOW)(str(len(procs))))
     for l in procs[:10]:
-        print("  " + l[:150])
-    print(DIM(T("Time Machine local snapshots (handle manually):")))
-    print("  " + (run(["tmutil", "listlocalsnapshots", "/"])[1].strip() or T("none")).replace("\n", "\n  "))
+        print("      " + DIM(l[:120]))
+    row(T("Time Machine local snapshots (handle manually)"), str(len(snaps)))
 
 # ───────────────────────── menus ─────────────────────────
 def show_manual():
-    print(BOLD(T("\nManual steps (things this tool cannot do locally):")))
+    heading(T("Manual checklist"), T("Things this tool cannot do locally"))
     for i, t in enumerate(MANUAL_TODO, 1):
-        print("  %2d. %s" % (i, t))
+        emit(t, 6, first="  " + CYAN("%2d" % i) + "  ")
     branches = []
     for root in SETTINGS["repo_roots"]:
         r = expand(root)
@@ -1010,19 +1125,18 @@ def show_manual():
             if cur.count("/") - r.count("/") >= 4:
                 dirs[:] = []
     if branches:
-        print(BOLD(T("\nLocal git branches whose name contains \"claude\":")))
+        heading(T("Local git branches whose name contains \"claude\""))
         for b in branches:
-            print("  " + b)
+            emit(b, 4, first="  · ")
 
 
 def settings_menu():
     while True:
-        print(BOLD(T("\nSettings:")))
-        print(T("  1. Deletion mode: %s") % (T("move to Trash") if SETTINGS["delete_mode"] == "trash" else RED(T("delete permanently"))))
-        print(T("  2. Project scan roots: %s") % ", ".join(SETTINGS["repo_roots"]))
-        print(T("  3. Language: %s") % i18n.label())
-        print(T("  0. Back"))
-        s = ask("> ")
+        heading(T("Settings"))
+        s = menu([("1", T("Deletion mode"), T("move to Trash") if SETTINGS["delete_mode"] == "trash" else T("delete permanently")),
+                  ("2", T("Project scan roots"), ", ".join(SETTINGS["repo_roots"]) or "-"),
+                  ("3", T("Language"), i18n.label()),
+                  ("0", T("Back"), "")])
         if _stdin_closed:
             return
         if s == "1":
@@ -1056,12 +1170,11 @@ def clean_all(backup_first=True):
 
 def do_health():
     import health_check
-    print(BOLD(T("\nCheck mode:")))
-    print(T("  1. Fingerprint check: account / device IDs, tracking cookies, reported device profile, behavior, reporting switches (seconds)"))
-    print(T("  2. Fingerprint check + extras: credentials, secret leaks in sessions (quick), external traces, system protection (about 2 min)"))
-    print(T("  3. Fingerprint check + extras (deep): secret scan includes the Cowork data disk (about 10 min)"))
-    print(T("  0. Back"))
-    s = ask("> ", "1")
+    heading(T("Fingerprint check"))
+    s = menu([("1", T("Standard"), T("IDs, cookies, device profile, behavior, reporting switches · seconds")),
+              ("2", T("+ Extras"), T("+ credentials, secret leaks, external traces, system protection · ~2 min")),
+              ("3", T("+ Extras, deep"), T("+ secret scan of the Cowork data disk · ~10 min")),
+              ("0", T("Back"), "")], "1")
     mode = {"1": "fp", "2": "fp+extra", "3": "fp+extra_deep"}.get(s)
     if not mode:
         return
@@ -1078,18 +1191,16 @@ def main():
         SETTINGS.update(json.loads(os.environ.pop("CFD_SETTINGS", "") or "{}"))
     except ValueError:
         pass
-    print(BOLD(CYAN(T("\nClaude local traces · fingerprint check, backup & clean"))))
-    print(DIM(T("Tool folder: %s") % TOOL_DIR.replace(HOME, "~")))
-    print(DIM(T("Logs go to logs/, reports to reports/, backups to backups/ (all contain fingerprint data; keep them safe).")))
+    print()
+    box([BOLD(T("Claude Fingerprint Detect")) + DIM("  v" + __version__),
+         DIM(T("Check · Back up · Clean    data in %s") % TOOL_DIR.replace(HOME, "~"))])
     while True:
-        print(BOLD(T("\nMain menu")))
-        print(T("  1. Fingerprint check (read-only)"))
-        print(T("  2. Backup: archive every Claude trace"))
-        print(T("  3. Clean: back up, remove every Claude trace, then verify"))
-        print(T("  4. Manual checklist (browser extension, phone, Time Machine, secret rotation...)"))
-        print(T("  5. Settings (deletion mode / project roots / language)"))
-        print(T("  0. Quit"))
-        s = ask("> ")
+        s = menu([("1", T("Fingerprint check"), T("read-only, takes seconds")),
+                  ("2", T("Backup"), T("archive every Claude trace")),
+                  ("3", T("Clean"), T("back up, remove every Claude trace, verify")),
+                  ("4", T("Manual checklist"), T("browser extension, phone, Time Machine, keys")),
+                  ("5", T("Settings"), T("deletion mode, project roots, language")),
+                  ("0", T("Quit"), "")])
         if _stdin_closed:
             break
         if s == "1":
@@ -1162,7 +1273,9 @@ def cli(argv):
         if args.json:
             print(json.dumps(r.to_dict(health_check.MODES[mode]), ensure_ascii=False, indent=2))
         elif ids:
-            print(DIM(T("\nTo remove these traces, run: %s clean") % PROG))
+            print("\n" + BOLD(T("Next steps")))
+            print("  " + CYAN(PROG + " backup") + "   " + DIM(T("back up every Claude trace")))
+            print("  " + CYAN(PROG + " clean") + "    " + DIM(T("remove every Claude trace")))
         return 0
 
     if args.cmd == "scan":

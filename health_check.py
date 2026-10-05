@@ -50,24 +50,54 @@ class Report:
 
     def section(self, title):
         self.sections.append((title, []))
-        self.out("\n" + self.cc.BOLD(self.cc.CYAN("■ " + title)))
+        if self.quiet:
+            return
+        cc = self.cc
+        m = re.match(r"(.+?)(?:[:：]\s*|\s*[(（])(.*?)[)）]?$", title)
+        head, sub = (m.group(1), m.group(2)) if m else (title, "")
+        print("\n" + cc.BOLD(cc.CYAN("▍" + head)))
+        if sub:
+            cc.emit(sub, 2, color=cc.DIM)
+        print(cc.DIM("  " + "─" * (cc.term_width() - 2)))
 
     def info(self, text):
         self.sections[-1][1].append(("info", None, text, "", []))
-        self.out("  " + text)
+        if self.quiet:
+            return
+        body = text.lstrip(" ")
+        indent = 9 if len(text) - len(body) >= 4 else 2
+        if body[:2] in ("● ", "○ "):
+            mark = self.cc.RED("● ") if body[0] == "●" else self.cc.DIM("○ ")
+            self.cc.emit(body[2:], indent + 2, first=" " * indent + mark)
+        else:
+            self.cc.emit(body, indent, color=self.cc.DIM)
 
     def ok(self, text):
         self.sections[-1][1].append(("ok", None, text, "", []))
-        self.out("  " + self.cc.GREEN("✓ ") + text)
+        if not self.quiet:
+            self.cc.emit(text, 4, first="  " + self.cc.GREEN("✓ "))
 
     def risk(self, level, text, advice="", items=()):
         f = ("risk", level, text, advice, list(items))
         self.sections[-1][1].append(f)
         self.findings.append(f)
-        tag = {1: self.cc.RED(T("✗ HIGH")), 2: self.cc.YELLOW(T("! MED ")), 3: self.cc.DIM(T("· LOW "))}[level]
-        self.out("  %s  %s" % (tag, text))
+        if self.quiet:
+            return
+        cc = self.cc
+        main, _, rest = text.partition("\n")
+        print()
+        m = re.match(r"(.*?[:：])\s*(~/.*)$", main)
+        paths = re.split(r",\s*(?=~/)", m.group(2)) if m else []
+        if len(paths) > 1 or (paths and cc.text_width(main) > cc.term_width() - 9):
+            cc.emit(m.group(1), 9, first="  " + cc.badge(level) + " ")
+            for p in paths:
+                cc.emit(p, 11, first=" " * 9 + cc.DIM("· "), hard=True)
+        else:
+            cc.emit(main, 9, first="  " + cc.badge(level) + " ")
+        if rest:
+            cc.emit(rest, 9, color=cc.DIM)
         if advice:
-            self.out("          " + self.cc.DIM(T("Advice: ") + advice))
+            cc.emit(T("Advice: ") + advice, 11, first=" " * 9 + cc.GREEN("→ "), color=cc.GREEN)
 
     def counts(self):
         return [sum(1 for f in self.findings if f[1] == l) for l in (1, 2, 3)]
@@ -357,7 +387,10 @@ MODES = {
 def run(cc, mode="fp", save=True, quiet=False):
     import fingerprint_check
     r = Report(cc, quiet=quiet)
-    cc.sys.stderr.write(cc.BOLD(T("Starting: %s...\n") % MODES[mode]))
+    if not quiet:
+        print()
+        cc.box([cc.BOLD(T("Claude Fingerprint Detect")) + cc.DIM("  v" + cc.__version__),
+                cc.DIM(MODES[mode] + " · " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))])
     fingerprint_check.run_fingerprint(r, cc, check_telemetry)
     if mode != "fp":
         check_credentials(r, cc)
@@ -366,9 +399,17 @@ def run(cc, mode="fp", save=True, quiet=False):
         check_system(r, cc)
 
     s = r.score()
-    color = cc.GREEN if s >= 80 else (cc.YELLOW if s >= 50 else cc.RED)
-    r.out("\n" + cc.BOLD(T("Fingerprint exposure score: ")) + color("%d / 100" % s)
-          + T(" (higher is cleaner)   high %d, medium %d, low %d") % tuple(r.counts()))
+    if not quiet:
+        color = cc.GREEN if s >= 80 else (cc.YELLOW if s >= 50 else cc.RED)
+        filled = int(round(s / 5.0))
+        meter = color("█" * filled) + cc.DIM("░" * (20 - filled))
+        hi, mid, lo = r.counts()
+        print()
+        cc.box([cc.BOLD(T("Fingerprint exposure score")),
+                "",
+                "  " + cc.BOLD(color("%3d" % s)) + cc.DIM(" / 100   ") + meter + cc.DIM("   " + T("higher is cleaner")),
+                "",
+                "  " + cc.badge(1) + " %-4d" % hi + cc.badge(2) + " %-4d" % mid + cc.badge(3) + " %d" % lo])
 
     if save:
         os.makedirs(cc.REPORT_ROOT, exist_ok=True)
