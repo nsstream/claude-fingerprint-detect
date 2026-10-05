@@ -438,7 +438,7 @@ def sec_system(r, cc):
 
 
 def sec_reporting(r, cc, check_telemetry):
-    r.section(T("6. Reporting switches"))
+    r.section(T("6. Pending telemetry"))
     check_telemetry(r, cc, section=False)
 
 

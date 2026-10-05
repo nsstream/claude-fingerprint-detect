@@ -276,7 +276,6 @@ ZH = {
     "Slack token": "Slack 令牌",
     "Google API key": "Google API Key",
     "Private key": "私钥",
-    ".env files": ".env 文件",
     "Advice: ": "建议：",
     "# Claude local fingerprint report": "# Claude 本机指纹体检报告",
     "- Time: %s": "- 时间：%s",
@@ -306,20 +305,7 @@ ZH = {
     "%s: %d distinct values in %d files. Examples: %s": "%s：%d 个不同值，分布在 %d 个文件。示例：%s",
     "these were already sent in conversations; deleting local files is not enough, rotate them at the provider":
         "这些值已经随对话发送过，删除本地文件不够，需要到对应平台轮换",
-    "Telemetry & reporting settings": "遥测与上报设置",
-    "environment": "环境变量",
-    "shell rc": "Shell 配置文件",
-    "%s is set (%s)": "已设置 %s（%s）",
-    "Not set: %s": "未设置：%s",
-    "add them to the env field of ~/.claude/settings.json (template in the README); re-apply after wiping ~/.claude":
-        "写入 ~/.claude/settings.json 的 env 字段（README 里有模板）；清理 ~/.claude 后需要重新配置",
     "%d failed-telemetry files (about %d events) may be re-sent on next launch": "有 %d 个遥测失败事件文件（约 %d 条事件），下次启动可能补发",
-    "permissions.deny does not block: %s; Claude can read them and send the content as context":
-        "permissions.deny 没有屏蔽：%s，Claude 可以读取并把内容发到上下文",
-    "add rules such as Read(~/.ssh/**) to permissions.deny in settings.json": "在 settings.json 的 permissions.deny 中加入 Read(~/.ssh/**) 等规则",
-    "permissions.deny blocks the common sensitive paths": "permissions.deny 已屏蔽常见敏感路径",
-    "cleanupPeriodDays is not set; transcripts are kept long-term by default": "未设置 cleanupPeriodDays，会话记录默认长期保留",
-    "set a short retention, e.g. 7": "设置较短的保留天数，例如 7",
     "Extra · Traces outside the Claude directories": "附加 · Claude 目录之外的痕迹",
     "Shell history: %s": "Shell 历史：%s",
     "filter out the matching commands": "过滤掉相关命令",
@@ -329,7 +315,6 @@ ZH = {
     "Other tools' configs referencing Anthropic: %s": "其他工具配置中引用了 Anthropic：%s",
     "edit manually": "手动修改",
     "Claude files in project repositories: %s": "项目仓库中的 Claude 文件：%s",
-    "confirm and delete one by one": "逐个确认后删除",
     "This tool has %d unencrypted backups (%s)": "本工具有 %d 份未加密备份（%s）",
     "convert to an encrypted DMG or delete": "转成加密 DMG 或删除",
     "Extra · System protection": "附加 · 系统防护",
@@ -474,7 +459,6 @@ ZH = {
     "Keychain entries: %s (Claude Safe Storage is the key that encrypts the desktop app cookies)":
         "钥匙串条目：%s（其中 Claude Safe Storage 是桌面版 Cookie 的加密密钥）",
     "Shell history: ": "Shell 历史：",
-    "6. Reporting switches": "6. 上报开关",
     "(checked %d files in %.0f s)": "（共检查 %d 个文件，用时 %.0f 秒）",
     '\nClean everything now (back up first, then confirm)?': '\n现在全部清理吗（先备份，再确认）？',
     "HIGH": "高危", "MED": "中危", "LOW": "低危",
@@ -541,4 +525,8 @@ ZH = {
     "auto-confirm everything (quits Claude / browser processes; never removes launch agents)": "全部自动确认（会退出 Claude / 浏览器进程；不会删除启动项）",
     "kept": "保留",
     "About to remove everything marked ✗ above, including the Claude apps": "即将删除以上标 ✗ 的全部内容，包括 Claude 应用",
+    "6. Pending telemetry": "6. 待发送的遥测",
+    "No pending telemetry files": "没有待发送的遥测文件",
+    "Pending telemetry": "待发送的遥测",
+    "kept by clean; remove them yourself if you want": "清理时会保留，如有需要请自行删除",
 }

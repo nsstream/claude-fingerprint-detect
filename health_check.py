@@ -23,15 +23,6 @@ SECRET_PATTERNS = [
 ]
 COMBINED = re.compile(b"|".join(b"(%s)" % p for _, p in SECRET_PATTERNS))
 
-TELEMETRY_ENV = [
-    ("DISABLE_TELEMETRY", "disable Statsig / event telemetry"),
-    ("DISABLE_ERROR_REPORTING", "disable Sentry error reporting"),
-    ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "disable all non-essential traffic (GrowthBook, update checks)"),
-    ("DISABLE_AUTOUPDATER", "disable auto-update"),
-    ("DISABLE_BUG_COMMAND", "disable /bug session uploads"),
-    ("CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY", "disable feedback surveys"),
-]
-DENY_HINTS = [(".ssh", "~/.ssh"), (".aws", "~/.aws"), (".env", T(".env files")), ("gh", "~/.config/gh")]
 
 W = {1: 6, 2: 3, 3: 1}
 LEVEL_WORD = {1: T("HIGH"), 2: T("MED"), 3: T("LOW")}
@@ -265,45 +256,18 @@ def scan_secrets(r, cc, deep):
 
 def check_telemetry(r, cc, section=True):
     if section:
-        r.section(T("Telemetry & reporting settings"))
-    H = os.path.expanduser("~")
-    st = load_json(H + "/.claude/settings.json") or {}
-    env = dict(st.get("env") or {})
-    rc_text = ""
-    for p in ("~/.zshrc", "~/.zprofile", "~/.zshenv", "~/.bashrc", "~/.profile"):
+        r.section(T("Pending telemetry"))
+    tel = glob.glob(os.path.expanduser("~/.claude/telemetry/*"))
+    if not tel:
+        r.ok(T("No pending telemetry files"))
+        return
+    n = 0
+    for p in tel:
         try:
-            rc_text += open(os.path.expanduser(p), errors="replace").read()
+            n += open(p, "rb").read().count(b'"event_name"')
         except OSError:
             pass
-    missing = []
-    for k, desc in TELEMETRY_ENV:
-        src = "settings.json" if k in env else (T("environment") if os.environ.get(k) else (T("shell rc") if re.search(r"\b%s=" % k, rc_text) else ""))
-        if src:
-            r.ok(T("%s is set (%s)") % (k, src))
-        else:
-            missing.append(k)
-    if missing:
-        r.risk(2, T("Not set: %s") % ", ".join(missing),
-               T("add them to the env field of ~/.claude/settings.json (template in the README); re-apply after wiping ~/.claude"))
-    tel = glob.glob(H + "/.claude/telemetry/*")
-    if tel:
-        n = 0
-        for p in tel:
-            try:
-                n += open(p, "rb").read().count(b'"event_name"')
-            except OSError:
-                pass
-        r.risk(2, T("%d failed-telemetry files (about %d events) may be re-sent on next launch") % (len(tel), n), T("delete"), ["C1"])
-    perms = (st.get("permissions") or {}).get("deny") or []
-    joined = " ".join(perms)
-    lack = [label for key, label in DENY_HINTS if key not in joined]
-    if lack:
-        r.risk(2, T("permissions.deny does not block: %s; Claude can read them and send the content as context") % ", ".join(lack),
-               T("add rules such as Read(~/.ssh/**) to permissions.deny in settings.json"))
-    else:
-        r.ok(T("permissions.deny blocks the common sensitive paths"))
-    if st.get("cleanupPeriodDays") is None:
-        r.risk(3, T("cleanupPeriodDays is not set; transcripts are kept long-term by default"), T("set a short retention, e.g. 7"))
+    r.risk(2, T("%d failed-telemetry files (about %d events) may be re-sent on next launch") % (len(tel), n), T("delete"), ["C1"])
 
 
 def check_exposure(r, cc):
@@ -313,13 +277,15 @@ def check_exposure(r, cc):
         ("J1", 2, T("Browser: %s"), T("delete the related cookies / history; remove the extension inside the browser")),
         ("H4", 3, T("Browser native messaging hosts: %s"), T("delete")),
         ("K2", 3, T("Other tools' configs referencing Anthropic: %s"), T("edit manually")),
-        ("L1", 3, T("Claude files in project repositories: %s"), T("confirm and delete one by one")),
+        ("L1", 3, T("Claude files in project repositories: %s"), T("kept by clean; remove them yourself if you want")),
     ]:
         targets, size, desc = cc.resolve(cc.ITEM_BY_ID[iid])
         if targets or desc:
             what = "; ".join(desc[:3]) if desc else T("%d paths, %s") % (len(targets), cc.human(size))
-            if iid in ("H4", "L1"):
+            if iid == "H4":
                 what = T("%d paths, %s") % (len(targets), cc.human(size))
+            elif iid == "L1":
+                what = T("%d paths") % len(desc)
             r.risk(lvl, tmpl % what, adv, [iid])
         else:
             r.ok(tmpl % T("not found"))
