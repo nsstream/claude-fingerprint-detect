@@ -4,7 +4,7 @@
 
 See what Claude (the desktop app, Claude Code and Cowork) has left on your Mac that can identify **you, your device and your account** — and clean it up safely if you want to.
 
-- **Check**: finds account and device IDs, tracking cookies, the hardware / environment profile that gets reported, usage patterns, and whether telemetry is switched off. Gives you a score and a report.
+- **Check**: finds account and device IDs, tracking cookies, the hardware / environment profile that gets reported, usage patterns, and telemetry still waiting to be sent. Gives you a score and a report.
 - **Back up**: archives sessions, config and credentials before touching anything (optionally into an encrypted disk image); apps, caches and logs that can be re-downloaded or are regenerated are skipped.
 - **Clean**: removes every Claude trace in one go, after showing you the full list and asking for confirmation.
 
