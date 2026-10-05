@@ -112,7 +112,7 @@ Tell the user where the backup is (`backups/<timestamp>/`, with `HOW_TO_RESTORE.
 
 ## Contributing
 
-- Files: `install.sh` (installer / uninstaller), `claude_fingerprint_detect.py` (catalog, scan, backup, clean, menu, CLI), `fingerprint_check.py` (fingerprint sections), `health_check.py` (report, scoring, extra checks), `i18n.py` (language detection and Chinese strings), `start.command` (double-click launcher).
+- Files: `install.sh` (installer / uninstaller), `claude_fingerprint_detect.py` (catalog, scan, backup, clean, menu, CLI), `fingerprint_check.py` (fingerprint sections), `health_check.py` (report, scoring, extra checks), `i18n.py` (language detection and Chinese strings).
 - Keep Python 3.9 compatible (no `match`, no `X | Y` types), standard library only, no network calls.
 - Checks must stay read-only: open SQLite with `?immutable=1`, never read keychain secrets (`security find-*-password` without `-g`).
 - Never hard-code anything specific to one machine (user names, IDs, sizes, personal paths).
