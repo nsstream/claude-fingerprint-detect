@@ -54,8 +54,8 @@ All commands: `~/.local/bin/cfd <command> [options] [--lang en|zh|auto]`
 
 | Command | Purpose | Typical runtime |
 | --- | --- | --- |
-| `check [--json] [--save]` | Fingerprint check with score and findings (read-only) | 3–5 min |
-| `check --extra` / `check --deep` | + credentials, secret scan, external traces, system protection | 6 / 10+ min |
+| `check [--json] [--save]` | Fingerprint check with score and findings (read-only) | seconds |
+| `check --extra` / `check --deep` | + credentials, secret scan, external traces, system protection | ~2 / 10+ min |
 | `backup [--yes] [--no-dmg] [--include-big]` | Archive every Claude trace into `backups/<timestamp>/` | depends on size |
 | `clean [--yes] [--rm] [--repo-root DIR]` | Remove every Claude trace (Trash by default), then verify | depends on size |
 | `scan [--json] [-v]` | Every location `clean` would touch, with sizes (read-only) | seconds |

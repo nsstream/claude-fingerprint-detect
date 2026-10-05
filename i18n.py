@@ -183,8 +183,11 @@ ZH = {
     "%d paths": "%d 个路径",
     "%d hits": "%d 处命中",
     "○ not found": "○ 未发现",
-    "\r\033[KScanning %d/%d  %s": "\r\033[K扫描中 %d/%d  %s",
     "  0. Back": "  0. 返回",
+    "Scanning": "扫描中",
+    "Scanning for secrets": "扫描密钥",
+    "Searching for your IDs": "查找你的标识",
+    "%s left": "剩余 %s",
 
     # ───────────── backup ─────────────
     "Skipping large item %s (%s); add --include-big to include it": "跳过大项 %s（%s）；加 --include-big 可包含",
@@ -266,10 +269,10 @@ ZH = {
 
     # ───────────── check menu / main menu ─────────────
     "\nCheck mode:": "\n体检模式：",
-    "  1. Fingerprint check: account / device IDs, tracking cookies, reported device profile, behavior, reporting switches (about 3-4 min)":
-        "  1. 指纹体检：账号 / 设备标识、追踪 Cookie、上报的设备画像、行为特征、上报开关（约 3-4 分钟）",
-    "  2. Fingerprint check + extras: credentials, secret leaks in sessions (quick), external traces, system protection (about 6 min)":
-        "  2. 指纹体检 + 附加项：凭据、会话中的密钥泄露（快速）、外部痕迹、系统防护（约 6 分钟）",
+    "  1. Fingerprint check: account / device IDs, tracking cookies, reported device profile, behavior, reporting switches (seconds)":
+        "  1. 指纹体检：账号 / 设备标识、追踪 Cookie、上报的设备画像、行为特征、上报开关（几秒钟）",
+    "  2. Fingerprint check + extras: credentials, secret leaks in sessions (quick), external traces, system protection (about 2 min)":
+        "  2. 指纹体检 + 附加项：凭据、会话中的密钥泄露（快速）、外部痕迹、系统防护（约 2 分钟）",
     "  3. Fingerprint check + extras (deep): secret scan includes the Cowork data disk (about 10 min)":
         "  3. 指纹体检 + 附加项（深度）：密钥扫描包含 Cowork 数据盘（约 10 分钟）",
     "This tool only supports macOS.": "本工具仅支持 macOS。",
@@ -337,7 +340,6 @@ ZH = {
     "Extra · Secret leaks in sessions & caches (%s)": "附加 · 会话与缓存中的密钥泄露（%s）",
     "deep: includes the Cowork data disk": "深度：含 Cowork 数据盘",
     "quick": "快速",
-    "\r\033[K  scanning %d/%d files, %s": "\r\033[K  扫描中 %d/%d 个文件，%s",
     "Scanned %d files, %s, in %.0f s%s": "共扫描 %d 个文件、%s，用时 %.0f 秒%s",
     " (files over 30 MB skipped; deep mode scans everything incl. the Cowork disk)":
         "（跳过 30 MB 以上的文件；深度模式会扫描全部，包括 Cowork 数据盘）",
@@ -456,7 +458,6 @@ ZH = {
     "desktop logs": "桌面版日志",
     "desktop other files": "桌面版其他文件",
     "other": "其他",
-    "\r\033[K  counting identifier locations %d/%d": "\r\033[K  统计标识分布 %d/%d",
     "1. Account & device identifiers: value, persistence, where they appear on this Mac": "1. 账号与设备标识：取值、持久性、在本机的分布",
     "comes back as soon as you sign in again": "重新登录即恢复关联",
     "randomly generated, persisted; regenerated after deletion": "随机生成，持久保存，删除后重新生成",

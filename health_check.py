@@ -192,16 +192,15 @@ def scan_secrets(r, cc, deep):
     hits = {}
     t0 = time.time()
     scanned = 0
+    bar = cc.Progress(T("Scanning for secrets"), len(files))
     for i, f in enumerate(files):
+        bar.update(i, cc.human(scanned))
         try:
             size = os.path.getsize(f)
         except OSError:
             continue
         if limit and size > limit:
             continue
-        if cc.sys.stderr.isatty() and i % 50 == 0:
-            cc.sys.stderr.write(T("\r\033[K  scanning %d/%d files, %s") % (i, len(files), cc.human(scanned)))
-            cc.sys.stderr.flush()
         try:
             with open(f, "rb") as fp:
                 prev = b""
@@ -217,8 +216,7 @@ def scan_secrets(r, cc, deep):
                     scanned += len(chunk)
         except OSError:
             pass
-    if cc.sys.stderr.isatty():
-        cc.sys.stderr.write("\r\033[K")
+    bar.done()
     r.info(T("Scanned %d files, %s, in %.0f s%s") % (len(files), cc.human(scanned), time.time() - t0,
                                                  "" if deep else T(" (files over 30 MB skipped; deep mode scans everything incl. the Cowork disk)")))
     if not hits:

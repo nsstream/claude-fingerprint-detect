@@ -46,7 +46,7 @@ Using an AI agent? Ask it:
 
 ## Recommended steps
 
-1. `cfd check`. Takes a few minutes. Each finding says why it matters.
+1. `cfd check`. Takes a few seconds. Each finding says why it matters.
 2. `cfd backup`, then `cfd clean`: lists everything that will be removed, cleans after you confirm, then verifies.
 3. `cfd manual` for things the tool cannot do locally (browser extension, phone app, Time Machine, rotating leaked keys).
 

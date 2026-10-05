@@ -222,26 +222,23 @@ def distribution(ids, cc):
         if v == H:
             forms = {v.encode(), v.replace("/", "-").encode()}
         needles.append(forms)
-    pattern = re.compile(b"|".join(b"(%s)" % b"|".join(re.escape(x) for x in forms) for forms in needles))
     dist = [collections.Counter() for _ in ids]
     t0 = time.time()
-    tty = cc.sys.stderr.isatty()
+    bar = cc.Progress(T("Searching for your IDs"), len(files))
     for n, f in enumerate(files):
-        if tty and n % 100 == 0:
-            cc.sys.stderr.write(T("\r\033[K  counting identifier locations %d/%d") % (n, len(files)))
-            cc.sys.stderr.flush()
+        bar.update(n)
         try:
             if os.path.getsize(f) > 30 * 1024 * 1024:
                 continue
-            data = open(f, "rb").read()
+            with open(f, "rb") as fp:
+                data = fp.read()
         except OSError:
             continue
-        seen = set(m.lastindex - 1 for m in pattern.finditer(data))
         g = group_of(f)
-        for i in seen:
-            dist[i][g] += 1
-    if tty:
-        cc.sys.stderr.write("\r\033[K")
+        for i, forms in enumerate(needles):
+            if any(x in data for x in forms):
+                dist[i][g] += 1
+    bar.done()
     return dist, len(files), time.time() - t0
 
 # ───────────────────────── sections ─────────────────────────

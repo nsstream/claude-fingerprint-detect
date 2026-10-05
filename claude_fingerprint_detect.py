@@ -16,6 +16,8 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
+import unicodedata
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -128,6 +130,68 @@ def run(cmd, sudo=False, capture=True):
         return p.returncode, out
     except FileNotFoundError:
         return 127, ""
+
+
+def text_width(s):
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in s)
+
+
+def clip(s, width):
+    out, w = "", 0
+    for ch in s:
+        w += text_width(ch)
+        if w > width:
+            return out + "…"
+        out += ch
+    return s
+
+
+class Progress:
+    """Single-line progress bar on stderr; silent when stderr is not a terminal."""
+    SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def __init__(self, label, total):
+        self.label, self.total = label, max(total, 1)
+        self.tty = sys.stderr.isatty()
+        self.t0 = self.last = time.time()
+        self.frame = 0
+
+    def update(self, n, detail=""):
+        now = time.time()
+        if not self.tty or (now - self.last < 0.08 and n < self.total):
+            return
+        self.last = now
+        self.frame += 1
+        cols = shutil.get_terminal_size((80, 20)).columns
+        pct = min(n / float(self.total), 1.0)
+        elapsed = now - self.t0
+        eta = ""
+        if n and elapsed > 1 and n < self.total:
+            left = int(elapsed * (self.total - n) / n)
+            eta = T("%s left") % ("%d:%02d" % divmod(left, 60))
+        total_s = format(self.total, ",")
+        count = ("%s/%s" % (format(n, ","), total_s)).rjust(len(total_s) * 2 + 1)
+        right = " %3d%%  %s  " % (pct * 100, count)
+        right_w = len(right) + text_width(T("%s left") % "00:00")
+        if cols < 64:
+            eta, right_w = "", len(right)
+        label = clip(self.label, max(6, cols - 1 - right_w - 6 - 10))
+        head_w = text_width(label) + 6
+        bar_w = max(10, min(36, cols - 1 - head_w - right_w))
+        fill = int(round(bar_w * pct))
+        spin = self.SPIN[self.frame % len(self.SPIN)]
+        head = "  \033[36m%s\033[0m %s  " % (spin, label)
+        bar = "\033[36m" + "━" * fill + "\033[0m\033[2m" + "─" * (bar_w - fill) + "\033[0m"
+        line_w = head_w + bar_w + len(right) + text_width(eta)
+        room = cols - 1 - line_w - 2
+        tail = ("  \033[2m" + clip(detail, room - 1) + "\033[0m") if detail and room > 8 else ""
+        sys.stderr.write("\r\033[K" + head + bar + right + "\033[2m" + eta + "\033[0m" + tail)
+        sys.stderr.flush()
+
+    def done(self):
+        if self.tty:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
 
 # ───────────────────────── risk catalog ─────────────────────────
 CATEGORIES = [
@@ -556,14 +620,11 @@ def scan_all(items=None):
     items = items or ITEMS
     res = {}
     total = len(items)
-    tty = sys.stderr.isatty()
+    bar = Progress(T("Scanning"), total)
     for i, it in enumerate(items, 1):
-        if tty:
-            sys.stderr.write(T("\r\033[KScanning %d/%d  %s") % (i, total, it["name"][:40]))
-            sys.stderr.flush()
+        bar.update(i - 1, it["name"])
         res[it["id"]] = resolve(it)
-    if tty:
-        sys.stderr.write("\r\033[K")
+    bar.done()
     return res
 
 
@@ -996,8 +1057,8 @@ def clean_all(backup_first=True):
 def do_health():
     import health_check
     print(BOLD(T("\nCheck mode:")))
-    print(T("  1. Fingerprint check: account / device IDs, tracking cookies, reported device profile, behavior, reporting switches (about 3-4 min)"))
-    print(T("  2. Fingerprint check + extras: credentials, secret leaks in sessions (quick), external traces, system protection (about 6 min)"))
+    print(T("  1. Fingerprint check: account / device IDs, tracking cookies, reported device profile, behavior, reporting switches (seconds)"))
+    print(T("  2. Fingerprint check + extras: credentials, secret leaks in sessions (quick), external traces, system protection (about 2 min)"))
     print(T("  3. Fingerprint check + extras (deep): secret scan includes the Cowork data disk (about 10 min)"))
     print(T("  0. Back"))
     s = ask("> ", "1")
