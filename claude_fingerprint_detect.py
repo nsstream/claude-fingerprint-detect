@@ -363,17 +363,17 @@ ITEMS = [
     item("C1", "C", 1, T("Claude Code telemetry leftovers & stats cache"),
          paths=["~/.claude/telemetry", "~/.claude/statsig", "~/.claude/stats-cache.json",
                 "~/.claude/mcp-needs-auth-cache.json", "~/.claude/.last-cleanup",
-                "~/.claude/.last-update-result.json"]),
+                "~/.claude/.last-update-result.json"], nobackup=True),
     item("C2", "C", 2, T("Desktop app Sentry / Crashpad / performance observer DB"),
          paths=[AS + "/sentry", AS + "/Crashpad", AS + "/declarative_performance_observer.db",
-                AS + "/declarative_performance_observer.db-journal", AS + "/DIPS"]),
-    item("C3", "C", 2, T("Desktop app logs"), paths=["~/Library/Logs/Claude"]),
+                AS + "/declarative_performance_observer.db-journal", AS + "/DIPS"], nobackup=True),
+    item("C3", "C", 2, T("Desktop app logs"), paths=["~/Library/Logs/Claude"], nobackup=True),
     item("C4", "C", 2, T("macOS crash reports (file names contain the hardware UUID)"),
          paths=["~/Library/Application Support/CrashReporter/Claude_*.plist",
                 "~/Library/Application Support/CrashReporter/claude*.plist",
-                "~/Library/Logs/DiagnosticReports/*[Cc]laude*"]),
+                "~/Library/Logs/DiagnosticReports/*[Cc]laude*"], nobackup=True),
     item("C5", "C", 3, T("System-wide crash reports (requires sudo)"), paths=["/Library/Logs/DiagnosticReports/*[Cc]laude*"],
-         sudo=True),
+         sudo=True, nobackup=True),
 
     # D Cowork
     item("D1", "D", 1, T("Cowork VM images & session data disk (unencrypted, contains copies of secrets)"),
@@ -386,7 +386,7 @@ ITEMS = [
                 AS + "/Session Storage", AS + "/Partitions", AS + "/WebStorage", AS + "/SharedStorage",
                 AS + "/Trust Tokens", AS + "/Trust Tokens-journal", AS + "/Network Persistent State",
                 AS + "/TransportSecurity", AS + "/blob_storage", AS + "/Shared Dictionary",
-                AS + "/shared_proto_db", AS + "/Local State", AS + "/Preferences"]),
+                AS + "/shared_proto_db", AS + "/Local State", AS + "/Preferences"], nobackup=True),
     item("E2", "E", 3, T("Desktop app caches (HTTP / code / GPU)"),
          paths=[AS + "/Cache", AS + "/Code Cache", AS + "/GPUCache", AS + "/DawnGraphiteCache",
                 AS + "/DawnWebGPUCache", AS + "/VideoDecodeStats", AS + "/fcache"], nobackup=True),
@@ -426,14 +426,14 @@ ITEMS = [
                 "~/Library/Preferences/ByHost/com.anthropic.*.plist"]),
     item("H2", "H", 2, T("\"Recent documents\" record"),
          paths=["~/Library/Application Support/com.apple.sharedfilelist/"
-                "com.apple.LSSharedFileList.ApplicationRecentDocuments/com.anthropic.*"]),
+                "com.apple.LSSharedFileList.ApplicationRecentDocuments/com.anthropic.*"], nobackup=True),
     item("H3", "H", 2, T("HTTPStorages / saved application state / WebKit / sandbox containers"),
          paths=["~/Library/HTTPStorages/com.anthropic.*",
                 "~/Library/Saved Application State/com.anthropic.*",
                 "~/Library/WebKit/com.anthropic.*", "~/Library/Containers/*anthropic*",
                 "~/Library/Group Containers/*anthropic*"]),
     item("H4", "H", 2, T("Browser native messaging hosts (Claude browser extension bridge)"),
-         paths=[os.path.join(r, NMH) for r, _ in BROWSER_ROOTS.values()]),
+         paths=[os.path.join(r, NMH) for r, _ in BROWSER_ROOTS.values()], nobackup=True),
     item("H5", "H", 2, T("LaunchAgents that invoke Claude"), kind="launchagent",
          paths=["~/Library/LaunchAgents/*.plist"]),
 
@@ -452,7 +452,7 @@ ITEMS = [
          paths=["~/.cursor/plugins/cache/claude-plugins-official",
                 "~/.cursor/plugins/marketplaces/claude-plugins-official",
                 "~/.bun/install/cache/opencode-anthropic-auth*",
-                "~/Library/Application Support/JetBrains/*/plugins/claude-code-jetbrains-plugin"]),
+                "~/Library/Application Support/JetBrains/*/plugins/claude-code-jetbrains-plugin"], nobackup=True),
     item("K2", "K", 3, T("Anthropic references in other tools' configs (report only, edit manually)"), kind="report_grep",
          paths=["~/.codex/config.toml", "~/.config/opencode/*.json", "~/.cursor/mcp.json"]),
 
@@ -818,7 +818,7 @@ def do_backup(items, scan=None):
     if kc:
         row(T("Keychain"), T("entry metadata only"))
     if not_needed:
-        row(DIM(T("Not backed up: apps, programs, caches (re-downloadable)")), DIM(human(not_needed)))
+        row(DIM(T("Not backed up: apps, caches, logs, login state (regenerated)")), DIM(human(not_needed)))
     total = sum(j[4] for j in jobs)
     free = shutil.disk_usage(TOOL_DIR).free
     print()
