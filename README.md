@@ -6,15 +6,30 @@ See what Claude (the desktop app, Claude Code and Cowork) has left on your Mac t
 
 - **Check**: finds account and device IDs, tracking cookies, the hardware / environment profile that gets reported, usage patterns, and whether telemetry is switched off. Gives you a score and a report.
 - **Back up**: archives everything before touching it (optionally into an encrypted disk image).
-- **Clean**: removes what you choose, by risk level or category, with a preview and confirmation at every step.
+- **Clean**: removes every Claude trace in one go, after showing you the full list and asking for confirmation.
 
 > **Unofficial tool.** Not affiliated with, endorsed by, or supported by Anthropic. "Claude" is a trademark of Anthropic.
+
+## Quick start
+
+```bash
+git clone https://github.com/nsstream/claude-fingerprint-detect.git
+cd claude-fingerprint-detect
+
+python3 claude_fingerprint_detect.py check    # 1. fingerprint check (read-only)
+python3 claude_fingerprint_detect.py backup   # 2. back up
+python3 claude_fingerprint_detect.py clean    # 3. clean (shows what will be removed and asks first)
+```
+
+`clean` removes **everything** Claude left behind, including the apps themselves — reinstall Claude afterwards if you want to keep using it. Prefer clicking? See [Get started](#get-started). Using an AI agent? Ask it:
+
+> Install https://github.com/nsstream/claude-fingerprint-detect following its AGENTS.md and run a fingerprint check.
 
 ## Is it safe?
 
 - **The check only reads.** It never changes or deletes anything.
 - **No internet.** The tool makes no network requests and sends nothing anywhere.
-- **Nothing is deleted without asking.** Every clean shows a preview first. Files go to the Trash by default, and there is a dry-run mode that only shows what would happen.
+- **Nothing is deleted without asking.** Every clean lists what will be removed and waits for your confirmation. Files go to the Trash by default.
 - **Open source, no dependencies.** Plain Python that ships with macOS — read every line before running it.
 
 ## Requirements
@@ -34,15 +49,13 @@ The interface follows your Mac's language (English or Simplified Chinese). You c
 
 ## Recommended steps
 
-1. **Fingerprint check** (menu 1). Takes a few minutes. Read the findings — each one says why it matters and which cleanup items fix it.
-2. **Scan** (menu 2) to see every location and how much space it uses.
-3. **Settings → Dry run ON**, then try **Clean** (menu 4). You will see exactly what would be removed, without removing anything.
-4. Turn dry run off and use **All-in-one** (menu 5): choose → back up → clean → verify.
-5. Go through the **Manual checklist** (menu 7) for things the tool cannot do locally (browser extension, phone app, Time Machine, rotating leaked keys).
+1. **Fingerprint check** (menu 1). Takes a few minutes. Each finding says why it matters.
+2. **Clean** (menu 3): backs up, lists everything that will be removed, asks you to type `DELETE`, cleans, then verifies.
+3. Go through the **Manual checklist** (menu 4) for things the tool cannot do locally (browser extension, phone app, Time Machine, rotating leaked keys).
 
 **Good to know before cleaning**
 
-- The "privacy" preset signs you out: Claude apps keep working, you just log in again.
+- Cleaning removes the Claude apps and signs you out. Reinstall and log in again if you keep using Claude.
 - If Claude is running, the tool asks to quit it (otherwise it would write the files back).
 - After cleaning shell history, close all Terminal windows and open new ones.
 - Project files such as `CLAUDE.md` or `.claude/` inside your projects are always confirmed one by one.
@@ -51,18 +64,18 @@ The interface follows your Mac's language (English or Simplified Chinese). You c
 
 | Category | Examples |
 | --- | --- |
-| A. Identity & credentials | account / device IDs in `~/.claude.json` and its backups, OAuth tokens, keychain entries |
-| B. Sessions & content | prompt history, session transcripts, paste cache, Cowork sessions |
-| C. Telemetry & logs | queued telemetry, Sentry data, logs, crash reports |
-| D. Cowork virtual machine | VM images and data disk (fixed VM UUID / MAC address) |
-| E. Desktop app browser data | cookies, local storage, caches |
-| F. Config, MCP, plugins | MCP configs (may hold third-party tokens), settings, skills |
-| G. Application files | the apps themselves and leftover folders (full uninstall only) |
-| H. macOS integration | preference files, recent documents, browser extension bridges, launch agents |
-| I. Shell history | commands mentioning claude / anthropic |
-| J. Other browsers | claude.ai / anthropic.com cookies and history in Chrome, Edge, Brave, Arc, Vivaldi, Chromium |
-| K. Third-party tools | Claude plugins in Cursor, JetBrains, Bun |
-| L. Your projects | `.claude/`, `CLAUDE.md`, `.mcp.json` in common project folders |
+| Identity & credentials | account / device IDs in `~/.claude.json` and its backups, OAuth tokens, keychain entries |
+| Sessions & content | prompt history, session transcripts, paste cache, Cowork sessions |
+| Telemetry & logs | queued telemetry, Sentry data, logs, crash reports |
+| Cowork virtual machine | VM images and data disk (fixed VM UUID / MAC address) |
+| Desktop app browser data | cookies, local storage, caches |
+| Config, MCP, plugins | MCP configs (may hold third-party tokens), settings, skills |
+| Application files | the apps themselves and leftover folders |
+| macOS integration | preference files, recent documents, browser extension bridges, launch agents |
+| Shell history | commands mentioning claude / anthropic |
+| Other browsers | claude.ai / anthropic.com cookies and history in Chrome, Edge, Brave, Arc, Vivaldi, Chromium |
+| Third-party tools | Claude plugins in Cursor, JetBrains, Bun |
+| Your projects | `.claude/`, `CLAUDE.md`, `.mcp.json` in common project folders |
 
 ## Keep it quiet afterwards
 
@@ -101,22 +114,18 @@ Each backup folder has a `HOW_TO_RESTORE.txt`. In short: quit Claude, then in Te
 
 ## Command line (optional)
 
-Everything in the menu is also available as commands; results print straight to the terminal.
-
 ```bash
 python3 claude_fingerprint_detect.py check                  # fingerprint check
 python3 claude_fingerprint_detect.py check --extra --save   # + credentials, secret leaks, system protection; save report
-python3 claude_fingerprint_detect.py check --json           # machine-readable output
-python3 claude_fingerprint_detect.py scan -v                # every location and its size
-python3 claude_fingerprint_detect.py list                   # all cleanup item IDs
-python3 claude_fingerprint_detect.py clean --preset privacy --dry-run
-python3 claude_fingerprint_detect.py clean --ids A1,A2 --backup
-python3 claude_fingerprint_detect.py verify
+python3 claude_fingerprint_detect.py backup                 # back up everything
+python3 claude_fingerprint_detect.py clean                  # remove everything
+python3 claude_fingerprint_detect.py scan -v                # see every location that would be cleaned
+python3 claude_fingerprint_detect.py verify                 # look for leftovers
 python3 claude_fingerprint_detect.py --lang zh check        # force a language (en | zh | auto)
 python3 claude_fingerprint_detect.py --help
 ```
 
-Presets: `privacy` (keep the apps), `uninstall` (remove everything), `high`, `high_mid`. `--yes` auto-confirms but never removes launch agents or files inside your projects. Set `CFD_LANG=zh` or `CFD_LANG=en` to fix the language.
+`clean --yes` skips the confirmation but never removes launch agents or files inside your projects. Set `CFD_LANG=zh` or `CFD_LANG=en` to fix the language. Automation and AI agents: see [AGENTS.md](AGENTS.md).
 
 ## Limitations
 

@@ -67,7 +67,7 @@ class Report:
         tag = {1: self.cc.RED(T("✗ HIGH")), 2: self.cc.YELLOW(T("! MED ")), 3: self.cc.DIM(T("· LOW "))}[level]
         self.out("  %s  %s" % (tag, text))
         if advice:
-            self.out("          " + self.cc.DIM(T("Advice: ") + advice + (T(" (cleanup items %s)") % ",".join(items) if items else "")))
+            self.out("          " + self.cc.DIM(T("Advice: ") + advice))
 
     def counts(self):
         return [sum(1 for f in self.findings if f[1] == l) for l in (1, 2, 3)]
@@ -80,7 +80,7 @@ class Report:
             "score": self.score(),
             "counts": dict(zip(("high", "medium", "low"), self.counts())),
             "sections": [{"title": t, "rows": [
-                {"kind": k, "level": lv.get(l), "text": re.sub(r"\s*\n\s*", " ", x), "advice": a, "cleanup_items": i}
+                {"kind": k, "level": lv.get(l), "text": re.sub(r"\s*\n\s*", " ", x), "advice": a}
                 for k, l, x, a, i in rows]} for t, rows in self.sections],
         }
 
@@ -104,7 +104,7 @@ class Report:
                 else:
                     lines.append("- **%s** %s" % (LEVEL_WORD[level], text))
                     if advice:
-                        lines.append(T("  - Advice: %s%s") % (advice, T(" (cleanup items %s)") % ", ".join(items) if items else ""))
+                        lines.append(T("  - Advice: %s") % advice)
             lines.append("")
         return "\n".join(re.sub(r"\033\[[0-9;]*m", "", l) for l in lines)
 

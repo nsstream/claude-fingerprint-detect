@@ -6,15 +6,30 @@
 
 - **体检**：找出账号与设备 ID、追踪 Cookie、会被上报的硬件 / 环境画像、使用习惯，以及遥测是否已关闭。给出打分和报告。
 - **备份**：动手之前先全部打包（可选加密成磁盘映像）。
-- **清理**：按风险级别或类别选择要删的内容，每一步都先预览、再确认。
+- **清理**：一次清除所有 Claude 痕迹，执行前列出完整清单并请你确认。
 
 > **非官方工具。** 与 Anthropic 无关，未获其认可或支持。“Claude” 是 Anthropic 的商标。
+
+## 快速开始
+
+```bash
+git clone https://github.com/nsstream/claude-fingerprint-detect.git
+cd claude-fingerprint-detect
+
+python3 claude_fingerprint_detect.py check    # 1. 指纹体检（只读）
+python3 claude_fingerprint_detect.py backup   # 2. 备份
+python3 claude_fingerprint_detect.py clean    # 3. 清理（先列出要删除的内容，确认后才执行）
+```
+
+`clean` 会清除 Claude 留下的**全部**内容，包括应用本身；之后如果还要用 Claude，重新安装即可。想用鼠标操作？见[开始使用](#开始使用)。用 AI agent？直接对它说：
+
+> 按照 https://github.com/nsstream/claude-fingerprint-detect 的 AGENTS.md 安装，并运行一次指纹体检。
 
 ## 安全吗？
 
 - **体检只读。** 不会修改或删除任何东西。
 - **不联网。** 工具不发出任何网络请求，不上传任何数据。
-- **不经确认不删除。** 每次清理都先预览；默认移到废纸篓；还有“预演模式”，只显示会发生什么。
+- **不经确认不删除。** 每次清理都先列出要删除的内容，确认后才执行；默认移到废纸篓。
 - **开源、无依赖。** 只用 macOS 自带的 Python，运行前可以逐行查看。
 
 ## 环境要求
@@ -34,15 +49,13 @@
 
 ## 推荐步骤
 
-1. **指纹体检**（菜单 1），需要几分钟。每条发现都会说明为什么重要，以及用哪个清理项处理。
-2. **扫描**（菜单 2），查看每个位置及占用空间。
-3. **设置 → 打开预演模式**，再试一次**清理**（菜单 4）：会列出将删除的内容，但什么都不删。
-4. 关闭预演，使用**一条龙**（菜单 5）：选择 → 备份 → 清理 → 验证。
-5. 按**手动事项清单**（菜单 7）处理工具在本地做不到的部分（浏览器扩展、手机 App、Time Machine、轮换泄露的密钥）。
+1. **指纹体检**（菜单 1），需要几分钟。每条发现都会说明为什么重要。
+2. **清理**（菜单 3）：先备份，列出将删除的全部内容，输入 `DELETE` 确认后清理，最后自动验证。
+3. 按**手动事项清单**（菜单 4）处理工具在本地做不到的部分（浏览器扩展、手机 App、Time Machine、轮换泄露的密钥）。
 
 **清理前须知**
 
-- “隐私清理”预设会让你退出登录：Claude 照常可用，重新登录即可。
+- 清理会移除 Claude 应用并退出登录；还要继续用的话，重新安装并登录即可。
 - 如果 Claude 正在运行，工具会请你退出它（否则它会把文件写回去）。
 - 清理 Shell 历史后，请关闭所有终端窗口再重新打开。
 - 项目里的 `CLAUDE.md`、`.claude/` 等文件总是逐个确认。
@@ -51,18 +64,18 @@
 
 | 类别 | 示例 |
 | --- | --- |
-| A. 身份与凭据 | `~/.claude.json` 及其备份里的账号 / 设备 ID、OAuth 令牌、钥匙串条目 |
-| B. 会话与内容 | 输入历史、会话记录、粘贴缓存、Cowork 会话 |
-| C. 遥测与日志 | 待发送的遥测、Sentry 数据、日志、崩溃报告 |
-| D. Cowork 虚拟机 | 虚拟机镜像与数据盘（固定的虚拟机 UUID / MAC 地址） |
-| E. 桌面版浏览器数据 | Cookie、本地存储、缓存 |
-| F. 配置、MCP、插件 | MCP 配置（可能含第三方令牌）、设置、技能 |
-| G. 应用程序文件 | 应用本身和残留目录（仅完全卸载时） |
-| H. macOS 系统集成 | 偏好设置、最近文档、浏览器扩展桥接、启动项 |
-| I. Shell 历史 | 提到 claude / anthropic 的命令 |
-| J. 其他浏览器 | Chrome、Edge、Brave、Arc、Vivaldi、Chromium 中 claude.ai / anthropic.com 的 Cookie 与历史 |
-| K. 第三方工具 | Cursor、JetBrains、Bun 中的 Claude 插件 |
-| L. 你的项目 | 常见项目目录中的 `.claude/`、`CLAUDE.md`、`.mcp.json` |
+| 身份与凭据 | `~/.claude.json` 及其备份里的账号 / 设备 ID、OAuth 令牌、钥匙串条目 |
+| 会话与内容 | 输入历史、会话记录、粘贴缓存、Cowork 会话 |
+| 遥测与日志 | 待发送的遥测、Sentry 数据、日志、崩溃报告 |
+| Cowork 虚拟机 | 虚拟机镜像与数据盘（固定的虚拟机 UUID / MAC 地址） |
+| 桌面版浏览器数据 | Cookie、本地存储、缓存 |
+| 配置、MCP、插件 | MCP 配置（可能含第三方令牌）、设置、技能 |
+| 应用程序文件 | 应用本身和残留目录 |
+| macOS 系统集成 | 偏好设置、最近文档、浏览器扩展桥接、启动项 |
+| Shell 历史 | 提到 claude / anthropic 的命令 |
+| 其他浏览器 | Chrome、Edge、Brave、Arc、Vivaldi、Chromium 中 claude.ai / anthropic.com 的 Cookie 与历史 |
+| 第三方工具 | Cursor、JetBrains、Bun 中的 Claude 插件 |
+| 你的项目 | 常见项目目录中的 `.claude/`、`CLAUDE.md`、`.mcp.json` |
 
 ## 之后如何减少暴露
 
@@ -101,22 +114,18 @@
 
 ## 命令行（可选）
 
-菜单里的功能都可以用命令完成，结果直接输出到终端。
-
 ```bash
 python3 claude_fingerprint_detect.py check                  # 指纹体检
 python3 claude_fingerprint_detect.py check --extra --save   # 加凭据、密钥泄露、系统防护，并保存报告
-python3 claude_fingerprint_detect.py check --json           # JSON 输出
-python3 claude_fingerprint_detect.py scan -v                # 所有位置及大小
-python3 claude_fingerprint_detect.py list                   # 全部清理项编号
-python3 claude_fingerprint_detect.py clean --preset privacy --dry-run
-python3 claude_fingerprint_detect.py clean --ids A1,A2 --backup
-python3 claude_fingerprint_detect.py verify
+python3 claude_fingerprint_detect.py backup                 # 全部备份
+python3 claude_fingerprint_detect.py clean                  # 全部清理
+python3 claude_fingerprint_detect.py scan -v                # 查看会被清理的所有位置
+python3 claude_fingerprint_detect.py verify                 # 检查残留
 python3 claude_fingerprint_detect.py --lang en check        # 指定语言（en | zh | auto）
 python3 claude_fingerprint_detect.py --help
 ```
 
-预设：`privacy`（保留软件）、`uninstall`（全部移除）、`high`、`high_mid`。`--yes` 会自动确认，但不会删除启动项和项目中的文件。设置环境变量 `CFD_LANG=zh` 或 `CFD_LANG=en` 可固定语言。
+`clean --yes` 跳过确认，但不会删除启动项和项目中的文件。设置环境变量 `CFD_LANG=zh` 或 `CFD_LANG=en` 可固定语言。自动化脚本和 AI agent 请看 [AGENTS.md](AGENTS.md)。
 
 ## 局限
 

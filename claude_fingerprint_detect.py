@@ -4,7 +4,7 @@
 claude-fingerprint-detect: fingerprint check, scan, backup, clean and verify Claude traces on macOS.
 
 Standard library only; works with the python3 (3.9) that ships with macOS. Makes no network requests.
-Nothing is deleted without confirmation: every clean shows a preview first, and a dry-run mode is available.
+Nothing is deleted without confirmation: every clean lists what will be removed and asks first.
 """
 import datetime
 import getpass
@@ -24,7 +24,7 @@ from i18n import T
 
 i18n.init(sys.argv)
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 HOME = os.path.expanduser("~")
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKUP_ROOT = os.path.join(TOOL_DIR, "backups")
@@ -51,7 +51,6 @@ def default_repo_roots():
 
 
 SETTINGS = {
-    "dry_run": False,
     "delete_mode": "trash",          # trash | rm
     "repo_roots": default_repo_roots(),
     "assume_yes": False,             # CLI --yes: answer "yes" to every confirmation
@@ -70,7 +69,6 @@ CYAN = lambda t: c(t, "36")
 BOLD = lambda t: c(t, "1")
 DIM = lambda t: c(t, "2")
 
-LEVEL_NAME = {1: RED(T("HIGH")), 2: YELLOW(T("MED ")), 3: DIM(T("LOW "))}
 
 _log_fp = None
 
@@ -110,10 +108,6 @@ def confirm(prompt, default=False):
     if not s:
         return default
     return s in ("y", "yes")
-
-
-def split_list(v):
-    return [x.strip().upper() for x in (v or "").replace(FULLWIDTH_COMMA, ",").split(",") if x.strip()]
 
 
 def human(n):
@@ -531,24 +525,14 @@ def has_content(it, targets, desc):
     return bool(targets or desc)
 
 # ───────────────────────── selection ─────────────────────────
-PRESETS = [
-    ("privacy", T("Privacy clean: identity, sessions, telemetry, cookies, Cowork VM, etc.; keeps the apps (sign in again afterwards)"),
-     lambda it: it["cat"] in "ABCDEHIJ" or it["id"] == "F1"),
-    ("uninstall", T("Full uninstall: everything above + apps, config, plugins, third-party leftovers (repo files still confirmed one by one)"),
-     lambda it: True),
-    ("high", T("High-risk items only"), lambda it: it["level"] == 1),
-    ("high_mid", T("High + medium-risk items"), lambda it: it["level"] <= 2),
-]
-
-
 def print_catalog(items=None, scan=None):
     items = items or ITEMS
     cur = None
     for it in items:
         if it["cat"] != cur:
             cur = it["cat"]
-            print("\n" + BOLD("[%s] %s" % (cur, CAT_NAME[cur])))
-        line = "  %-3s %s  %s" % (it["id"], LEVEL_NAME[it["level"]], it["name"])
+            print("\n" + BOLD(CAT_NAME[cur]))
+        line = "  " + it["name"]
         if scan is not None:
             targets, size, desc = scan[it["id"]]
             if has_content(it, targets, desc):
@@ -581,35 +565,6 @@ def scan_all(items=None):
         sys.stderr.write("\r\033[K")
     return res
 
-
-def select_items():
-    print(BOLD(T("\nChoose a scope:")))
-    for i, (_, label, _) in enumerate(PRESETS, 1):
-        print("  %d. %s" % (i, label))
-    print(T("  5. By category (e.g. A,B,D)"))
-    print(T("  6. By item ID (e.g. A1,A3,D1)"))
-    print(T("  0. Back"))
-    s = ask("> ")
-    if s in ("1", "2", "3", "4"):
-        f = PRESETS[int(s) - 1][2]
-        chosen = [it for it in ITEMS if f(it) and not it.get("explicit")]
-    elif s == "5":
-        print("  " + "  ".join("%s=%s" % (k, v) for k, v in CATEGORIES))
-        cats = set(split_list(ask(T("Categories> "))))
-        chosen = [it for it in ITEMS if it["cat"] in cats]
-    elif s == "6":
-        print_catalog()
-        ids = set(split_list(ask(T("\nItem IDs> "))))
-        chosen = [it for it in ITEMS if it["id"] in ids]
-    else:
-        return []
-    if not chosen:
-        print(YELLOW(T("Nothing selected.")))
-        return []
-    print(BOLD(T("\n%d items selected:") % len(chosen)))
-    print_catalog(chosen)
-    ex = set(split_list(ask(T("\nIDs to exclude (Enter to skip)> "))))
-    return [it for it in chosen if it["id"] not in ex]
 
 # ───────────────────────── backup ─────────────────────────
 def dedupe(paths):
@@ -647,17 +602,17 @@ def do_backup(items, scan=None):
             continue
         if size > BIG_ITEM:
             if SETTINGS["assume_yes"] and not SETTINGS["include_big"]:
-                log(T("Skipping large item %s (%s); add --include-big to include it") % (it["id"], human(size)))
+                log(T("Skipping large item %s (%s); add --include-big to include it") % (it["name"], human(size)))
                 continue
-            if not SETTINGS["assume_yes"] and not confirm(T("%s %s is %s. Include it in the backup?") % (it["id"], it["name"], human(size)), False):
-                log(T("Skipping large item %s") % it["id"])
+            if not SETTINGS["assume_yes"] and not confirm(T("%s is %s. Include it in the backup?") % (it["name"], human(size)), False):
+                log(T("Skipping large item %s") % it["name"])
                 continue
         by_cat.setdefault(it["cat"], []).extend(targets)
         sizes[it["cat"]] = sizes.get(it["cat"], 0) + size
 
     kc = [it for it in items if it["kind"] == "keychain"]
     if not by_cat and not kc:
-        print(YELLOW(T("None of the selected items exist on this Mac; nothing to back up.")))
+        print(YELLOW(T("No Claude traces found on this Mac; nothing to back up.")))
         return None
 
     print(BOLD(T("\nBackup plan (destination: %s)") % dest.replace(HOME, "~")))
@@ -707,7 +662,9 @@ def do_backup(items, scan=None):
         os.chmod(os.path.join(dest, n), 0o600)
     log(GREEN(T("Backup finished: %s (%s)") % (dest, human(du(dest)))))
 
-    if SETTINGS["dmg"] and confirm(T("Pack the backup into an AES-256 encrypted DMG (you will be asked for a password)?"), True):
+    if SETTINGS["dmg"] and not sys.stdin.isatty():
+        log(YELLOW(T("Skipped the encrypted DMG: it needs a password typed in a terminal (pass --no-dmg to silence this).")))
+    elif SETTINGS["dmg"] and confirm(T("Pack the backup into an AES-256 encrypted DMG (you will be asked for a password)?"), True):
         dmg = dest + ".dmg"
         rc, _ = run(["hdiutil", "create", "-encryption", "AES-256", "-srcfolder", dest,
                      "-volname", "claude-backup-" + ts, dmg], capture=False)
@@ -723,9 +680,6 @@ def do_backup(items, scan=None):
 
 # ───────────────────────── clean ─────────────────────────
 def remove_path(p, sudo=False):
-    if SETTINGS["dry_run"]:
-        log(T("  [dry run] delete %s") % p)
-        return True
     try:
         if sudo:
             rc, _ = run(["rm", "-rf", p], sudo=True, capture=False)
@@ -756,16 +710,11 @@ def clean_keychain(it):
         flag = {"generic-s": ("find-generic-password", "delete-generic-password", "-s"),
                 "generic-a": ("find-generic-password", "delete-generic-password", "-a"),
                 "internet": ("find-internet-password", "delete-internet-password", "-s")}[t]
-        if SETTINGS["dry_run"]:
-            log(T("  [dry run] delete keychain entry %s %s") % (t, v))
-            continue
         for _ in range(20):
             if run(["security", flag[0], flag[2], v])[0] != 0:
                 break
             run(["security", flag[1], flag[2], v])
         log(T("  deleted keychain entry %s %s") % (t, v))
-    if SETTINGS["dry_run"]:
-        return
     rc, out = run(["security", "dump-keychain"])
     left = [l.strip() for l in out.splitlines() if re.search(r"claude|anthropic", l, re.I)]
     if left:
@@ -779,9 +728,6 @@ def clean_history(f):
     entries = history_entries(data)
     keep = [e for e in entries if not entry_hit(e)]
     n = len(entries) - len(keep)
-    if SETTINGS["dry_run"]:
-        log(T("  [dry run] %s: remove %d entries") % (f, n))
-        return
     tmp = f + ".cfd_tmp"
     with open(tmp, "wb") as fp:
         fp.write(b"\n".join(b"\n".join(e) for e in keep))
@@ -810,9 +756,6 @@ def clean_chrome():
                 if not proc_running(proc):
                     break
                 time.sleep(0.5)
-        if SETTINGS["dry_run"]:
-            log(T("  [dry run] clean databases and site storage of %s/%s") % (bname, prof))
-            continue
         stmts = []
         for db in cookies:
             stmts.append((db, ["DELETE FROM cookies WHERE " + cookie_where()]))
@@ -855,8 +798,7 @@ def clean_launchagents(it):
             continue
         if not confirm(T("  Unload and delete this launch agent?"), False):
             continue
-        if not SETTINGS["dry_run"]:
-            run(["launchctl", "bootout", "gui/" + uid, f])
+        run(["launchctl", "bootout", "gui/" + uid, f])
         remove_path(f)
 
 
@@ -896,7 +838,7 @@ def stop_processes():
     print(YELLOW(T("\nClaude-related processes are running (if left running they will write the files back):")))
     for l in lines[:15]:
         print("  " + l[:150])
-    if confirm(T("Quit these processes now?"), True) and not SETTINGS["dry_run"]:
+    if confirm(T("Quit these processes now?"), True):
         run(["osascript", "-e", 'quit app "Claude"'])
         run(["pkill", "-f", "Claude.app"])
         run(["pkill", "-x", "claude"])
@@ -908,16 +850,16 @@ def do_clean(items, scan=None):
     scan = scan or scan_all(items)
     todo = [it for it in items if has_content(it, scan[it["id"]][0], scan[it["id"]][2])]
     if not todo:
-        print(GREEN(T("None of the selected items exist on this Mac; nothing to clean.")))
+        print(GREEN(T("No Claude traces found on this Mac; nothing to clean.")))
         return
     todo.sort(key=lambda it: (bool(it.get("last")), it["id"]))
 
-    print(BOLD(T("\nClean preview:")) + ("  " + YELLOW(T("[DRY RUN]")) if SETTINGS["dry_run"] else ""))
+    print(BOLD(T("\nClean preview:")))
     total = 0
     for it in todo:
         targets, size, desc = scan[it["id"]]
         total += size
-        print("\n  %s %s  %s  %s" % (it["id"], LEVEL_NAME[it["level"]], it["name"], human(size) if size else ""))
+        print("\n  %s  %s" % (it["name"], human(size) if size else ""))
         for t in targets[:8]:
             print("      " + DIM(t.replace(HOME, "~")))
         if len(targets) > 8:
@@ -927,31 +869,15 @@ def do_clean(items, scan=None):
     mode = T("move to Trash") if SETTINGS["delete_mode"] == "trash" else T("delete permanently (cannot be undone)")
     print(T("\nTotal about %s, deletion mode: %s") % (human(total), mode))
 
-    if not SETTINGS["assume_yes"]:
-        print(BOLD(T("\nConfirmation mode:")))
-        print(T("  1. Per category   2. Per item   3. Everything at once   0. Cancel"))
-    how = "3" if SETTINGS["assume_yes"] else ask("> ", "1")
-    if how not in ("1", "2", "3"):
+    if not SETTINGS["assume_yes"] and ask(RED(T("Type DELETE to clean everything above: "))) != "DELETE":
+        print(T("Cancelled."))
         return
-    if how == "3" and not SETTINGS["dry_run"] and not SETTINGS["assume_yes"]:
-        if ask(RED(T("Type DELETE to clean everything: "))) != "DELETE":
-            print(T("Cancelled."))
-            return
 
     stop_processes()
-    log(BOLD(T("Cleaning started (%s)") % (T("dry run") if SETTINGS["dry_run"] else mode)))
-    asked_cat = {}
+    log(BOLD(T("Cleaning started (%s)") % mode))
     for it in todo:
-        if how == "1":
-            if it["cat"] not in asked_cat:
-                asked_cat[it["cat"]] = confirm(T("\nProcess category [%s] %s?") % (it["cat"], CAT_NAME[it["cat"]]), True)
-            if not asked_cat[it["cat"]]:
-                continue
-        elif how == "2":
-            if not confirm(T("\n%s %s?") % (it["id"], it["name"]), True):
-                continue
         targets, _, desc = scan[it["id"]]
-        log(CYAN("▶ %s %s" % (it["id"], it["name"])))
+        log(CYAN("▶ " + it["name"]))
         k = it["kind"]
         if k == "path":
             for t in targets:
@@ -960,9 +886,8 @@ def do_clean(items, scan=None):
         elif k == "prefs":
             for t in targets:
                 remove_path(t)
-            if not SETTINGS["dry_run"]:
-                run(["defaults", "delete", "com.anthropic.claudefordesktop"])
-                run(["killall", "cfprefsd"])
+            run(["defaults", "delete", "com.anthropic.claudefordesktop"])
+            run(["killall", "cfprefsd"])
         elif k == "keychain":
             clean_keychain(it)
         elif k == "history":
@@ -980,7 +905,8 @@ def do_clean(items, scan=None):
             for d in desc:
                 print("    " + d)
     _size_cache.clear()
-    log(GREEN(T("Cleaning finished. Run \"verify\" next and review the manual checklist.")))
+    log(GREEN(T("Cleaning finished.")))
+    return True
 
 # ───────────────────────── verify ─────────────────────────
 def do_verify():
@@ -1030,23 +956,20 @@ def show_manual():
 def settings_menu():
     while True:
         print(BOLD(T("\nSettings:")))
-        print(T("  1. Dry run (show only, delete nothing): %s") % (GREEN(T("ON")) if SETTINGS["dry_run"] else T("off")))
-        print(T("  2. Deletion mode: %s") % (T("move to Trash") if SETTINGS["delete_mode"] == "trash" else RED(T("delete permanently"))))
-        print(T("  3. Project scan roots: %s") % ", ".join(SETTINGS["repo_roots"]))
-        print(T("  4. Language: %s") % i18n.label())
+        print(T("  1. Deletion mode: %s") % (T("move to Trash") if SETTINGS["delete_mode"] == "trash" else RED(T("delete permanently"))))
+        print(T("  2. Project scan roots: %s") % ", ".join(SETTINGS["repo_roots"]))
+        print(T("  3. Language: %s") % i18n.label())
         print(T("  0. Back"))
         s = ask("> ")
         if _stdin_closed:
             return
         if s == "1":
-            SETTINGS["dry_run"] = not SETTINGS["dry_run"]
-        elif s == "2":
             SETTINGS["delete_mode"] = "rm" if SETTINGS["delete_mode"] == "trash" else "trash"
-        elif s == "3":
+        elif s == "2":
             v = ask(T("Comma-separated directories> "))
             if v:
                 SETTINGS["repo_roots"] = [x.strip() for x in v.replace(FULLWIDTH_COMMA, ",").split(",") if x.strip()]
-        elif s == "4":
+        elif s == "3":
             switch_language()
         else:
             return
@@ -1060,11 +983,13 @@ def switch_language():
     os.execve(sys.executable, [sys.executable, script, "--lang", new], env)
 
 
-def backup_then_clean(items, scan):
-    if not SETTINGS["dry_run"] and confirm(T("Back up these items before cleaning?"), True):
-        if do_backup(items, scan) is None and not confirm(T("No backup was created. Continue cleaning anyway?"), False):
+def clean_all(backup_first=True):
+    scan = scan_all()
+    if backup_first and confirm(T("Back up before cleaning?"), True):
+        if do_backup(ITEMS, scan) is None and not confirm(T("No backup was created. Continue cleaning anyway?"), False):
             return
-    do_clean(items, scan)
+    if do_clean(ITEMS, scan):
+        do_verify()
 
 
 def do_health():
@@ -1079,30 +1004,8 @@ def do_health():
     if not mode:
         return
     ids, _ = health_check.run(sys.modules[__name__], mode)
-    if not ids:
-        return
-    print(BOLD(T("\nCleanup items matching the findings:")) + " " + ", ".join(ids))
-    if not confirm(T("Start cleaning based on these findings (asks about backup first, then confirms each step)?"), False):
-        return
-    chosen = sorted((ITEM_BY_ID[i] for i in ids), key=lambda it: it["id"])
-    print_catalog(chosen)
-    ex = set(split_list(ask(T("\nIDs to exclude (Enter to skip)> "))))
-    chosen = [it for it in chosen if it["id"] not in ex]
-    if chosen:
-        backup_then_clean(chosen, scan_all(chosen))
-
-
-def do_scan_menu():
-    scan = scan_all()
-    print_catalog(scan=scan)
-    if confirm(T("\nShow the paths of one item?"), False):
-        iid = ask(T("Item ID> ")).upper()
-        if iid in scan:
-            t, size, desc = scan[iid]
-            for x in t:
-                print("  %s  %s" % (human(du(x)).rjust(7), x.replace(HOME, "~")))
-            for d in desc:
-                print("  " + d)
+    if ids and confirm(T("\nClean everything now (back up first, then confirm)?"), False):
+        clean_all()
 
 
 def main():
@@ -1117,15 +1020,12 @@ def main():
     print(DIM(T("Tool folder: %s") % TOOL_DIR.replace(HOME, "~")))
     print(DIM(T("Logs go to logs/, reports to reports/, backups to backups/ (all contain fingerprint data; keep them safe).")))
     while True:
-        print(BOLD(T("\nMain menu")) + ("  " + YELLOW(T("[DRY RUN]")) if SETTINGS["dry_run"] else ""))
-        print(T("  1. Fingerprint check: account / device IDs, tracking cookies, device profile (optional secret scan)"))
-        print(T("  2. Scan: list every risk location and its size"))
-        print(T("  3. Backup: choose by level / category and archive"))
-        print(T("  4. Clean: choose by level / category, confirm, delete"))
-        print(T("  5. All-in-one: choose -> backup -> clean -> verify"))
-        print(T("  6. Verify: look for leftovers"))
-        print(T("  7. Manual checklist (browser extension, phone, Time Machine, secret rotation...)"))
-        print(T("  8. Settings (dry run / deletion mode / project roots / language)"))
+        print(BOLD(T("\nMain menu")))
+        print(T("  1. Fingerprint check (read-only)"))
+        print(T("  2. Backup: archive every Claude trace"))
+        print(T("  3. Clean: back up, remove every Claude trace, then verify"))
+        print(T("  4. Manual checklist (browser extension, phone, Time Machine, secret rotation...)"))
+        print(T("  5. Settings (deletion mode / project roots / language)"))
         print(T("  0. Quit"))
         s = ask("> ")
         if _stdin_closed:
@@ -1133,29 +1033,13 @@ def main():
         if s == "1":
             do_health()
         elif s == "2":
-            do_scan_menu()
+            do_backup(ITEMS)
         elif s == "3":
-            items = select_items()
-            if items:
-                do_backup(items)
-        elif s == "4":
-            items = select_items()
-            if items:
-                backup_then_clean(items, scan_all(items))
-        elif s == "5":
-            items = select_items()
-            if items:
-                scan = scan_all(items)
-                if do_backup(items, scan) is None and not confirm(T("No backup was created. Continue cleaning anyway?"), False):
-                    continue
-                do_clean(items, scan)
-                do_verify()
-                show_manual()
-        elif s == "6":
-            do_verify()
-        elif s == "7":
+            clean_all()
             show_manual()
-        elif s == "8":
+        elif s == "4":
+            show_manual()
+        elif s == "5":
             settings_menu()
         elif s == "0":
             break
@@ -1163,45 +1047,13 @@ def main():
 # ───────────────────────── command-line mode ─────────────────────────
 CLI_EPILOG = T("""
 examples:
-  %(prog)s check                     fingerprint check, printed to the terminal
-  %(prog)s check --extra             add credentials / secret leaks / external traces / system protection
-  %(prog)s check --deep --save       deep check, also save a Markdown report to reports/
-  %(prog)s check --json > fp.json    JSON output for scripts
-  %(prog)s scan                      list every risk location and size
-  %(prog)s scan --ids D1,A1 -v       show the paths of specific items
-  %(prog)s list                      list all cleanup item IDs
-  %(prog)s backup --preset privacy   back up a preset (asks about encryption)
-  %(prog)s clean --preset privacy --dry-run      preview a clean, delete nothing
-  %(prog)s clean --ids A1,A2,A4 --backup         back up, then clean specific items (confirm each)
-  %(prog)s clean --preset high --yes --no-dmg    unattended: auto-confirm, no DMG
-  %(prog)s verify                    look for leftovers
-  %(prog)s manual                    manual checklist
+  %(prog)s check     fingerprint check (read-only)
+  %(prog)s backup    back up every Claude trace to backups/
+  %(prog)s clean     remove every Claude trace (lists everything and asks first)
 
 Run without arguments for the interactive menu.
-Presets: privacy (keep apps), uninstall (remove everything), high (high risk only), high_mid (high + medium).
 Language: --lang en|zh|auto (default auto: follows the macOS preferred language; CFD_LANG also works).
 """)
-
-
-def pick_items(args):
-    if args.preset:
-        f = dict((k, fn) for k, _, fn in PRESETS)[args.preset]
-        chosen = [it for it in ITEMS if f(it) and not it.get("explicit")]
-    elif args.cats or args.ids:
-        cats, ids = set(split_list(args.cats)), set(split_list(args.ids))
-        chosen = [it for it in ITEMS if it["cat"] in cats or it["id"] in ids]
-    else:
-        return None
-    ex = set(split_list(args.exclude))
-    return [it for it in chosen if it["id"] not in ex]
-
-
-def add_selector(p):
-    g = p.add_argument_group(T("scope (pick one; combine with --exclude)"))
-    g.add_argument("--preset", choices=[k for k, _, _ in PRESETS])
-    g.add_argument("--cats", metavar="A,B", help=T("by category"))
-    g.add_argument("--ids", metavar="A1,D1", help=T("by item ID"))
-    g.add_argument("--exclude", metavar="E2,G1", help=T("item IDs to exclude"))
 
 
 def cli(argv):
@@ -1213,34 +1065,25 @@ def cli(argv):
     ap.add_argument("--lang", choices=["en", "zh", "auto"], help=T("UI language: en, zh or auto (follow macOS)"))
     sub = ap.add_subparsers(dest="cmd")
 
-    p = sub.add_parser("check", help=T("fingerprint check, printed to the terminal"))
+    p = sub.add_parser("check", help=T("fingerprint check (read-only)"))
     p.add_argument("--extra", action="store_true", help=T("extras: credentials, quick secret scan, external traces, system protection"))
     p.add_argument("--deep", action="store_true", help=T("extras (deep): secret scan includes the Cowork data disk"))
     p.add_argument("--json", action="store_true", help=T("JSON output"))
     p.add_argument("--save", action="store_true", help=T("also save a Markdown report to reports/"))
 
-    p = sub.add_parser("scan", help=T("list risk locations and sizes"))
-    p.add_argument("--ids", metavar="A1,D1", help=T("only scan these item IDs"))
-    p.add_argument("-v", "--verbose", action="store_true", help=T("show paths"))
-    p.add_argument("--json", action="store_true")
-
-    sub.add_parser("list", help=T("list all cleanup item IDs"))
-
-    p = sub.add_parser("backup", help=T("back up the selected items"))
-    add_selector(p)
+    p = sub.add_parser("backup", help=T("back up every Claude trace"))
     p.add_argument("--yes", action="store_true", help=T("auto-confirm"))
     p.add_argument("--include-big", action="store_true", help=T("include items larger than 2 GB (e.g. the Cowork VM)"))
     p.add_argument("--no-dmg", action="store_true", help=T("skip the encrypted DMG"))
 
-    p = sub.add_parser("clean", help=T("clean the selected items"))
-    add_selector(p)
-    p.add_argument("--dry-run", action="store_true", help=T("preview only, delete nothing"))
-    p.add_argument("--backup", action="store_true", help=T("back up before cleaning"))
+    p = sub.add_parser("clean", help=T("remove every Claude trace"))
     p.add_argument("--rm", action="store_true", help=T("delete permanently (default: move to Trash)"))
     p.add_argument("--yes", action="store_true", help=T("auto-confirm everything (quits Claude / browser processes; never removes launch agents or project files)"))
-    p.add_argument("--include-big", action="store_true")
-    p.add_argument("--no-dmg", action="store_true")
     p.add_argument("--repo-root", metavar="DIR", action="append", help=T("project scan root, may be repeated"))
+
+    p = sub.add_parser("scan", help=T("list every location that would be cleaned, with sizes"))
+    p.add_argument("-v", "--verbose", action="store_true", help=T("show paths"))
+    p.add_argument("--json", action="store_true", help=T("JSON output"))
 
     sub.add_parser("verify", help=T("look for leftovers"))
     sub.add_parser("manual", help=T("manual checklist"))
@@ -1255,43 +1098,33 @@ def cli(argv):
         mode = "fp+extra_deep" if args.deep else ("fp+extra" if args.extra else "fp")
         ids, r = health_check.run(sys.modules[__name__], mode, save=args.save, quiet=args.json)
         if args.json:
-            d = r.to_dict(health_check.MODES[mode])
-            d["cleanup_items"] = ids
-            print(json.dumps(d, ensure_ascii=False, indent=2))
-        else:
-            print(T("\nMatching cleanup items: %s") % (", ".join(ids) or T("none")))
-            if ids:
-                print(DIM(T("Example: python3 %s clean --ids %s --backup --dry-run")
-                          % (os.path.abspath(__file__).replace(HOME, "~"), ",".join(ids))))
+            print(json.dumps(r.to_dict(health_check.MODES[mode]), ensure_ascii=False, indent=2))
+        elif ids:
+            print(DIM(T("\nTo remove these traces, run: python3 %s clean") % os.path.abspath(__file__).replace(HOME, "~")))
         return 0
 
     if args.cmd == "scan":
-        items = [ITEM_BY_ID[i] for i in split_list(args.ids) if i in ITEM_BY_ID] or ITEMS
-        scan = scan_all(items)
+        scan = scan_all()
         if args.json:
             out = []
-            for it in items:
+            for it in ITEMS:
                 t, size, desc = scan[it["id"]]
-                out.append({"id": it["id"], "category": CAT_NAME[it["cat"]], "level": it["level"], "name": it["name"],
+                out.append({"category": CAT_NAME[it["cat"]], "name": it["name"],
                             "found": bool(t or desc), "count": len(t), "bytes": size, "paths": t, "details": desc})
             print(json.dumps(out, ensure_ascii=False, indent=2))
             return 0
-        print_catalog(items, scan)
+        print_catalog(ITEMS, scan)
         if args.verbose:
-            for it in items:
+            for it in ITEMS:
                 t, size, desc = scan[it["id"]]
                 if t or desc:
-                    print("\n" + BOLD("%s %s" % (it["id"], it["name"])))
+                    print("\n" + BOLD(it["name"]))
                     for x in t:
                         print("  %s  %s" % (human(du(x)).rjust(7), x.replace(HOME, "~")))
                     for d in desc:
                         print("  " + d)
-        found = [it for it in items if scan[it["id"]][0] or scan[it["id"]][2]]
-        print(T("\nFound %d / %d items, %s in total") % (len(found), len(items), human(sum(scan[it["id"]][1] for it in found))))
-        return 0
-
-    if args.cmd == "list":
-        print_catalog()
+        found = [it for it in ITEMS if scan[it["id"]][0] or scan[it["id"]][2]]
+        print(T("\nFound %d / %d items, %s in total") % (len(found), len(ITEMS), human(sum(scan[it["id"]][1] for it in found))))
         return 0
 
     if args.cmd == "verify":
@@ -1302,29 +1135,19 @@ def cli(argv):
         show_manual()
         return 0
 
-    items = pick_items(args)
-    if not items:
-        print(RED(T("Specify a scope with --preset / --cats / --ids. Run `list` to see item IDs.")))
-        return 2
     SETTINGS["assume_yes"] = args.yes
-    SETTINGS["include_big"] = args.include_big
-    SETTINGS["dmg"] = not args.no_dmg
-    print(BOLD(T("%d items selected:") % len(items)) + " " + ", ".join(it["id"] for it in items))
 
     if args.cmd == "backup":
-        return 0 if do_backup(items) else 1
+        SETTINGS["include_big"] = args.include_big
+        SETTINGS["dmg"] = not args.no_dmg
+        return 0 if do_backup(ITEMS) else 1
 
     if args.cmd == "clean":
-        SETTINGS["dry_run"] = args.dry_run
         SETTINGS["delete_mode"] = "rm" if args.rm else "trash"
         if args.repo_root:
             SETTINGS["repo_roots"] = args.repo_root
-        scan = scan_all(items)
-        if args.backup and not args.dry_run and do_backup(items, scan) is None:
-            if SETTINGS["assume_yes"] or not confirm(T("No backup was created. Continue cleaning anyway?"), False):
-                print(RED(T("Backup did not complete; cleaning stopped.")))
-                return 1
-        do_clean(items, scan)
+        if do_clean(ITEMS):
+            do_verify()
         return 0
     return 0
 

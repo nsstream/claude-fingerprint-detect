@@ -72,7 +72,6 @@ def T(s):
 
 ZH = {
     # ───────────── shared ─────────────
-    "HIGH": "高危", "MED ": "中危", "LOW ": "低危", "MED": "中危", "LOW": "低危",
     " (follows system)": "（跟随系统）",
     "%s [auto: yes]": "%s [自动：是]",
     "%s: %s": "%s：%s",
@@ -181,32 +180,15 @@ ZH = {
     "%s: %d matching entries": "%s：%d 条命中",
     "%s/%s: %d cookies, %d history URLs, %d saved passwords, %d site storage dirs":
         "%s/%s：Cookie %d 个，历史 URL %d 条，已存密码 %d 个，站点存储目录 %d 个",
-    "Privacy clean: identity, sessions, telemetry, cookies, Cowork VM, etc.; keeps the apps (sign in again afterwards)":
-        "隐私清理：身份、会话、遥测、Cookie、Cowork 虚拟机等，保留软件（之后需重新登录）",
-    "Full uninstall: everything above + apps, config, plugins, third-party leftovers (repo files still confirmed one by one)":
-        "完全卸载：以上全部 + 应用、配置、插件、第三方残留（项目文件仍逐个确认）",
-    "High-risk items only": "只处理高风险项",
-    "High + medium-risk items": "高 + 中风险项",
     "%d paths": "%d 个路径",
     "%d hits": "%d 处命中",
     "○ not found": "○ 未发现",
     "\r\033[KScanning %d/%d  %s": "\r\033[K扫描中 %d/%d  %s",
-    "\nChoose a scope:": "\n选择范围：",
-    "  5. By category (e.g. A,B,D)": "  5. 按类别（如 A,B,D）",
-    "  6. By item ID (e.g. A1,A3,D1)": "  6. 按编号（如 A1,A3,D1）",
     "  0. Back": "  0. 返回",
-    "Categories> ": "类别> ",
-    "\nItem IDs> ": "\n编号> ",
-    "Nothing selected.": "什么都没选。",
-    "\n%d items selected:": "\n已选 %d 项：",
-    "%d items selected:": "已选 %d 项：",
-    "\nIDs to exclude (Enter to skip)> ": "\n要排除的编号（回车跳过）> ",
 
     # ───────────── backup ─────────────
     "Skipping large item %s (%s); add --include-big to include it": "跳过大项 %s（%s）；加 --include-big 可包含",
-    "%s %s is %s. Include it in the backup?": "%s %s 有 %s，要一起备份吗？",
     "Skipping large item %s": "跳过大项 %s",
-    "None of the selected items exist on this Mac; nothing to back up.": "所选项在本机都不存在，无需备份。",
     "\nBackup plan (destination: %s)": "\n备份计划（目标：%s）",
     "  [%s] %s: %d paths, about %s": "  [%s] %s：%d 个路径，约 %s",
     "  Keychain: entry metadata only": "  钥匙串：只记录条目信息",
@@ -238,20 +220,16 @@ ZH = {
     "DMG creation failed; the plaintext backup remains at %s": "DMG 创建失败，明文备份仍在 %s",
 
     # ───────────── clean ─────────────
-    "  [dry run] delete %s": "  [预演] 删除 %s",
     "  FAILED %s: %s": "  失败 %s：%s",
     "  deleted ": "  已删除 ",
     "  FAILED ": "  失败 ",
-    "  [dry run] delete keychain entry %s %s": "  [预演] 删除钥匙串条目 %s %s",
     "  deleted keychain entry %s %s": "  已删除钥匙串条目 %s %s",
     "  The keychain still has matches (search in Keychain Access and delete manually):":
         "  钥匙串里仍有匹配项（请在“钥匙串访问”中搜索并手动删除）：",
-    "  [dry run] %s: remove %d entries": "  [预演] %s：删除 %d 条",
     "  %s: removed %d commands": "  %s：已删除 %d 条命令",
     "  %s is running and must quit before its databases can be changed. Quit it now?":
         "  %s 正在运行，修改数据库前必须退出。现在退出吗？",
     "  skipped %s/%s": "  已跳过 %s/%s",
-    "  [dry run] clean databases and site storage of %s/%s": "  [预演] 清理 %s/%s 的数据库与站点存储",
     "  %s/%s %s: deleted %d rows": "  %s/%s %s：删除 %d 行",
     "  failed to modify %s: %s": "  修改 %s 失败：%s",
     "  skipped (--yes never removes launch agents; run without --yes to confirm): %s": "  已跳过（--yes 不会删除启动项，去掉 --yes 可逐个确认）：%s",
@@ -262,25 +240,16 @@ ZH = {
         "\n检测到 Claude 相关进程在运行（不退出的话会把文件重新写回）：",
     "Quit these processes now?": "现在退出这些进程？",
     "Attempted to quit Claude-related processes": "已尝试退出 Claude 相关进程",
-    "None of the selected items exist on this Mac; nothing to clean.": "所选项在本机都不存在，无需清理。",
     "\nClean preview:": "\n清理预览：",
-    "[DRY RUN]": "[预演模式]",
     "... and %d more": "…… 另有 %d 个",
     "move to Trash": "移到废纸篓",
     "delete permanently (cannot be undone)": "直接删除（不可恢复）",
     "\nTotal about %s, deletion mode: %s": "\n共约 %s，删除方式：%s",
-    "\nConfirmation mode:": "\n确认方式：",
-    "  1. Per category   2. Per item   3. Everything at once   0. Cancel": "  1. 逐类确认   2. 逐项确认   3. 全部一次确认   0. 取消",
-    "Type DELETE to clean everything: ": "输入 DELETE 确认全部清理：",
     "Cancelled.": "已取消。",
     "Cleaning started (%s)": "开始清理（%s）",
-    "dry run": "预演",
-    "\nProcess category [%s] %s?": "\n处理类别 [%s] %s？",
-    "\n%s %s?": "\n%s %s？",
     "  Note: close every terminal window and reopen; otherwise running shells write their in-memory history back on exit.":
         "  注意：关闭所有终端窗口后再重开，否则正在运行的 Shell 退出时会把内存里的历史写回去。",
     "  These locations need manual editing:": "  以下位置需要手动修改：",
-    "Cleaning finished. Run \"verify\" next and review the manual checklist.": "清理结束。建议接着运行“验证”，并查看手动事项清单。",
 
     # ───────────── verify / manual / settings ─────────────
     "Verification passed: no leftovers at any known risk location.": "验证通过：所有已知风险位置都没有残留。",
@@ -291,15 +260,8 @@ ZH = {
     "\nManual steps (things this tool cannot do locally):": "\n手动事项（本工具在本地无法完成的部分）：",
     "\nLocal git branches whose name contains \"claude\":": "\n名称包含 “claude” 的本地 git 分支：",
     "\nSettings:": "\n设置：",
-    "  1. Dry run (show only, delete nothing): %s": "  1. 预演模式（只显示，不删除）：%s",
-    "ON": "开",
-    "off": "关",
-    "  2. Deletion mode: %s": "  2. 删除方式：%s",
     "delete permanently": "直接删除",
-    "  3. Project scan roots: %s": "  3. 项目扫描目录：%s",
-    "  4. Language: %s": "  4. 语言 / Language：%s",
     "Comma-separated directories> ": "逗号分隔的目录> ",
-    "Back up these items before cleaning?": "清理前先备份这些项？",
     "No backup was created. Continue cleaning anyway?": "没有生成备份，仍然继续清理吗？",
 
     # ───────────── check menu / main menu ─────────────
@@ -310,91 +272,25 @@ ZH = {
         "  2. 指纹体检 + 附加项：凭据、会话中的密钥泄露（快速）、外部痕迹、系统防护（约 6 分钟）",
     "  3. Fingerprint check + extras (deep): secret scan includes the Cowork data disk (about 10 min)":
         "  3. 指纹体检 + 附加项（深度）：密钥扫描包含 Cowork 数据盘（约 10 分钟）",
-    "\nCleanup items matching the findings:": "\n与发现对应的清理项：",
-    "Start cleaning based on these findings (asks about backup first, then confirms each step)?":
-        "按体检结果开始清理吗（会先询问备份，再逐步确认）？",
-    "\nShow the paths of one item?": "\n查看某一项的具体路径？",
-    "Item ID> ": "编号> ",
     "This tool only supports macOS.": "本工具仅支持 macOS。",
     "\nClaude local traces · fingerprint check, backup & clean": "\nClaude 本机痕迹 · 指纹体检、备份与清理",
     "Tool folder: %s": "工具目录：%s",
     "Logs go to logs/, reports to reports/, backups to backups/ (all contain fingerprint data; keep them safe).":
         "日志在 logs/，报告在 reports/，备份在 backups/（都含指纹数据，请妥善保管）。",
     "\nMain menu": "\n主菜单",
-    "  1. Fingerprint check: account / device IDs, tracking cookies, device profile (optional secret scan)":
-        "  1. 指纹体检：账号 / 设备标识、追踪 Cookie、设备画像（可选密钥扫描）",
-    "  2. Scan: list every risk location and its size": "  2. 扫描：列出每个风险位置及大小",
-    "  3. Backup: choose by level / category and archive": "  3. 备份：按级别 / 类别选择并打包",
-    "  4. Clean: choose by level / category, confirm, delete": "  4. 清理：按级别 / 类别选择，确认后删除",
-    "  5. All-in-one: choose -> backup -> clean -> verify": "  5. 一条龙：选择 → 备份 → 清理 → 验证",
-    "  6. Verify: look for leftovers": "  6. 验证：检查残留",
-    "  7. Manual checklist (browser extension, phone, Time Machine, secret rotation...)":
-        "  7. 手动事项清单（浏览器扩展、手机、Time Machine、密钥轮换……）",
-    "  8. Settings (dry run / deletion mode / project roots / language)": "  8. 设置（预演模式 / 删除方式 / 项目目录 / 语言）",
     "  0. Quit": "  0. 退出",
     "\nInterrupted.": "\n已中断。",
 
     # ───────────── CLI ─────────────
-    """
-examples:
-  %(prog)s check                     fingerprint check, printed to the terminal
-  %(prog)s check --extra             add credentials / secret leaks / external traces / system protection
-  %(prog)s check --deep --save       deep check, also save a Markdown report to reports/
-  %(prog)s check --json > fp.json    JSON output for scripts
-  %(prog)s scan                      list every risk location and size
-  %(prog)s scan --ids D1,A1 -v       show the paths of specific items
-  %(prog)s list                      list all cleanup item IDs
-  %(prog)s backup --preset privacy   back up a preset (asks about encryption)
-  %(prog)s clean --preset privacy --dry-run      preview a clean, delete nothing
-  %(prog)s clean --ids A1,A2,A4 --backup         back up, then clean specific items (confirm each)
-  %(prog)s clean --preset high --yes --no-dmg    unattended: auto-confirm, no DMG
-  %(prog)s verify                    look for leftovers
-  %(prog)s manual                    manual checklist
-
-Run without arguments for the interactive menu.
-Presets: privacy (keep apps), uninstall (remove everything), high (high risk only), high_mid (high + medium).
-Language: --lang en|zh|auto (default auto: follows the macOS preferred language; CFD_LANG also works).
-""": """
-示例：
-  %(prog)s check                     指纹体检，结果直接输出到终端
-  %(prog)s check --extra             加上凭据 / 密钥泄露 / 外部痕迹 / 系统防护
-  %(prog)s check --deep --save       深度体检，并在 reports/ 保存 Markdown 报告
-  %(prog)s check --json > fp.json    JSON 输出，方便脚本处理
-  %(prog)s scan                      列出所有风险位置及大小
-  %(prog)s scan --ids D1,A1 -v       查看指定项的具体路径
-  %(prog)s list                      列出全部清理项编号
-  %(prog)s backup --preset privacy   按预设备份（会询问是否加密）
-  %(prog)s clean --preset privacy --dry-run      预演清理，不删除任何东西
-  %(prog)s clean --ids A1,A2,A4 --backup         先备份再清理指定项（逐项确认）
-  %(prog)s clean --preset high --yes --no-dmg    无人值守：自动确认，不做 DMG
-  %(prog)s verify                    检查残留
-  %(prog)s manual                    手动事项清单
-
-不带参数运行进入交互菜单。
-预设：privacy（保留软件）、uninstall（全部移除）、high（只处理高风险）、high_mid（高 + 中风险）。
-语言：--lang en|zh|auto（默认 auto，跟随 macOS 首选语言；也可用环境变量 CFD_LANG）。
-""",
-    "scope (pick one; combine with --exclude)": "范围（任选一种，可配合 --exclude）",
-    "by category": "按类别",
-    "by item ID": "按编号",
-    "item IDs to exclude": "要排除的编号",
     "Claude local fingerprint check, backup and clean (macOS)": "Claude 本机指纹体检、备份与清理（macOS）",
-    "fingerprint check, printed to the terminal": "指纹体检，结果输出到终端",
     "extras: credentials, quick secret scan, external traces, system protection": "附加项：凭据、快速密钥扫描、外部痕迹、系统防护",
     "extras (deep): secret scan includes the Cowork data disk": "附加项（深度）：密钥扫描包含 Cowork 数据盘",
     "JSON output": "JSON 输出",
     "also save a Markdown report to reports/": "同时在 reports/ 保存 Markdown 报告",
-    "list risk locations and sizes": "列出风险位置及大小",
-    "only scan these item IDs": "只扫描这些编号",
     "show paths": "显示路径",
-    "list all cleanup item IDs": "列出全部清理项编号",
-    "back up the selected items": "备份所选项",
     "auto-confirm": "自动确认",
     "include items larger than 2 GB (e.g. the Cowork VM)": "包含大于 2 GB 的项（如 Cowork 虚拟机）",
     "skip the encrypted DMG": "不做加密 DMG",
-    "clean the selected items": "清理所选项",
-    "preview only, delete nothing": "只预演，不删除",
-    "back up before cleaning": "清理前先备份",
     "delete permanently (default: move to Trash)": "直接删除（默认移到废纸篓）",
     "auto-confirm everything (quits Claude / browser processes; never removes launch agents or project files)":
         "全部自动确认（会退出 Claude / 浏览器进程；不会删除启动项和项目文件）",
@@ -402,12 +298,9 @@ Language: --lang en|zh|auto (default auto: follows the macOS preferred language;
     "look for leftovers": "检查残留",
     "manual checklist": "手动事项清单",
     "UI language: en, zh or auto (follow macOS)": "界面语言：en、zh 或 auto（跟随 macOS）",
-    "\nMatching cleanup items: %s": "\n对应清理项：%s",
-    "Example: python3 %s clean --ids %s --backup --dry-run": "示例：python3 %s clean --ids %s --backup --dry-run",
     "\nFound %d / %d items, %s in total": "\n发现 %d / %d 项，共 %s",
-    "Specify a scope with --preset / --cats / --ids. Run `list` to see item IDs.":
-        "请用 --preset / --cats / --ids 指定范围，运行 `list` 查看编号。",
-    "Backup did not complete; cleaning stopped.": "备份未完成，已停止清理。",
+    "Skipped the encrypted DMG: it needs a password typed in a terminal (pass --no-dmg to silence this).":
+        "已跳过加密 DMG：它需要在终端中输入密码（加 --no-dmg 可不再提示）。",
 
     # ───────────── health_check ─────────────
     "Alibaba Cloud AccessKey": "阿里云 AccessKey",
@@ -423,13 +316,11 @@ Language: --lang en|zh|auto (default auto: follows the macOS preferred language;
     "! MED ": "! 中危",
     "· LOW ": "· 低危",
     "Advice: ": "建议：",
-    " (cleanup items %s)": "（清理项 %s）",
     "# Claude local fingerprint report": "# Claude 本机指纹体检报告",
     "- Time: %s": "- 时间：%s",
     "- Mode: %s": "- 模式：%s",
     "- Score: **%d / 100** (high %d, medium %d, low %d)": "- 得分：**%d / 100**（高风险 %d，中风险 %d，低风险 %d）",
     "- OK: ": "- 正常：",
-    "  - Advice: %s%s": "  - 建议：%s%s",
     " (length %d)": "（长度 %d）",
     "Extra · Credentials & tokens": "附加 · 凭据与令牌",
     "~/.claude/.credentials.json stores OAuth access / refresh tokens in plaintext (mode %o%s)":
@@ -630,4 +521,27 @@ Language: --lang en|zh|auto (default auto: follows the macOS preferred language;
     "  Counting where each identifier appears (skipping files over 30 MB and VM images)...\n":
         "  正在统计各标识在本机文件中的分布（跳过 30 MB 以上文件和虚拟机镜像）……\n",
     "(checked %d files in %.0f s)": "（共检查 %d 个文件，用时 %.0f 秒）",
+    '\nClean everything now (back up first, then confirm)?': '\n现在全部清理吗（先备份，再确认）？',
+    '\nTo remove these traces, run: python3 %s clean': '\n要清除这些痕迹，运行：python3 %s clean',
+    "HIGH": "高危", "MED": "中危", "LOW": "低危",
+    '  - Advice: %s': '  - 建议：%s',
+    '  1. Deletion mode: %s': '  1. 删除方式：%s',
+    '  1. Fingerprint check (read-only)': '  1. 指纹体检（只读）',
+    '  2. Backup: archive every Claude trace': '  2. 备份：打包所有 Claude 痕迹',
+    '  2. Project scan roots: %s': '  2. 项目扫描目录：%s',
+    '  3. Clean: back up, remove every Claude trace, then verify': '  3. 清理：先备份，再清除所有 Claude 痕迹并验证',
+    '  3. Language: %s': '  3. 语言：%s',
+    '  4. Manual checklist (browser extension, phone, Time Machine, secret rotation...)': '  4. 手动事项清单（浏览器扩展、手机、Time Machine、轮换密钥…）',
+    '  5. Settings (deletion mode / project roots / language)': '  5. 设置（删除方式 / 项目目录 / 语言）',
+    '%s is %s. Include it in the backup?': '%s 有 %s，要包含进备份吗？',
+    'Back up before cleaning?': '清理前先备份吗？',
+    'Cleaning finished.': '清理完成。',
+    'No Claude traces found on this Mac; nothing to back up.': '这台 Mac 上没有发现 Claude 痕迹，无需备份。',
+    'No Claude traces found on this Mac; nothing to clean.': '这台 Mac 上没有发现 Claude 痕迹，无需清理。',
+    'Type DELETE to clean everything above: ': '输入 DELETE 清理以上全部内容：',
+    'back up every Claude trace': '备份所有 Claude 痕迹',
+    'fingerprint check (read-only)': '指纹体检（只读）',
+    'list every location that would be cleaned, with sizes': '列出所有会被清理的位置及大小',
+    'remove every Claude trace': '清除所有 Claude 痕迹',
+    '\nexamples:\n  %(prog)s check     fingerprint check (read-only)\n  %(prog)s backup    back up every Claude trace to backups/\n  %(prog)s clean     remove every Claude trace (lists everything and asks first)\n\nRun without arguments for the interactive menu.\nLanguage: --lang en|zh|auto (default auto: follows the macOS preferred language; CFD_LANG also works).\n': '\n示例：\n  %(prog)s check     指纹体检（只读）\n  %(prog)s backup    把所有 Claude 痕迹备份到 backups/\n  %(prog)s clean     清除所有 Claude 痕迹（先列出全部内容并确认）\n\n不带参数运行进入交互菜单。\n语言：--lang en|zh|auto（默认 auto：跟随 macOS 首选语言；也可用 CFD_LANG）。\n',
 }
