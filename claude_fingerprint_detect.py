@@ -27,6 +27,7 @@ i18n.init(sys.argv)
 __version__ = "1.1.0"
 HOME = os.path.expanduser("~")
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+PROG = os.environ.get("CFD_PROG") or "python3 " + os.path.abspath(__file__).replace(HOME, "~")
 BACKUP_ROOT = os.path.join(TOOL_DIR, "backups")
 LOG_ROOT = os.path.join(TOOL_DIR, "logs")
 REPORT_ROOT = os.path.join(TOOL_DIR, "reports")
@@ -1058,7 +1059,7 @@ Language: --lang en|zh|auto (default auto: follows the macOS preferred language;
 
 def cli(argv):
     import argparse
-    ap = argparse.ArgumentParser(prog=os.path.basename(__file__),
+    ap = argparse.ArgumentParser(prog=os.environ.get("CFD_PROG") or os.path.basename(__file__),
                                  description=T("Claude local fingerprint check, backup and clean (macOS)"),
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=CLI_EPILOG)
     ap.add_argument("--version", action="version", version="claude-fingerprint-detect " + __version__)
@@ -1100,7 +1101,7 @@ def cli(argv):
         if args.json:
             print(json.dumps(r.to_dict(health_check.MODES[mode]), ensure_ascii=False, indent=2))
         elif ids:
-            print(DIM(T("\nTo remove these traces, run: python3 %s clean") % os.path.abspath(__file__).replace(HOME, "~")))
+            print(DIM(T("\nTo remove these traces, run: %s clean") % PROG))
         return 0
 
     if args.cmd == "scan":

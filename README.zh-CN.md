@@ -12,13 +12,18 @@
 
 ## 快速开始
 
-```bash
-git clone https://github.com/nsstream/claude-fingerprint-detect.git
-cd claude-fingerprint-detect
+安装 `claude-fingerprint-detect` 命令（装到 `~/.claude-fingerprint-detect`，不碰其他任何东西）：
 
-python3 claude_fingerprint_detect.py check    # 1. 指纹体检（只读）
-python3 claude_fingerprint_detect.py backup   # 2. 备份
-python3 claude_fingerprint_detect.py clean    # 3. 清理（先列出要删除的内容，确认后才执行）
+```bash
+curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash
+```
+
+然后打开一个新的终端窗口：
+
+```bash
+claude-fingerprint-detect check    # 1. 指纹体检（只读）
+claude-fingerprint-detect backup   # 2. 备份
+claude-fingerprint-detect clean    # 3. 清理（先列出要删除的内容，确认后才执行）
 ```
 
 `clean` 会清除 Claude 留下的**全部**内容，包括应用本身；之后如果还要用 Claude，重新安装即可。想用鼠标操作？见[开始使用](#开始使用)。用 AI agent？直接对它说：
@@ -112,17 +117,19 @@ python3 claude_fingerprint_detect.py clean    # 3. 清理（先列出要删除�
 
 每个备份目录里都有 `HOW_TO_RESTORE.txt`。简单来说：先退出 Claude，然后在终端对需要的包执行 `tar -xzf <包名>.tar.gz -C /`。钥匙串密码不会被导出，恢复后需要重新登录。
 
-## 命令行（可选）
+## 命令行
+
+用上面“快速开始”的命令安装（再运行一次即可更新；卸载：`curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash -s -- --uninstall`）。
 
 ```bash
-python3 claude_fingerprint_detect.py check                  # 指纹体检
-python3 claude_fingerprint_detect.py check --extra --save   # 加凭据、密钥泄露、系统防护，并保存报告
-python3 claude_fingerprint_detect.py backup                 # 全部备份
-python3 claude_fingerprint_detect.py clean                  # 全部清理
-python3 claude_fingerprint_detect.py scan -v                # 查看会被清理的所有位置
-python3 claude_fingerprint_detect.py verify                 # 检查残留
-python3 claude_fingerprint_detect.py --lang en check        # 指定语言（en | zh | auto）
-python3 claude_fingerprint_detect.py --help
+claude-fingerprint-detect check                  # 指纹体检
+claude-fingerprint-detect check --extra --save   # 加凭据、密钥泄露、系统防护，并保存报告
+claude-fingerprint-detect backup                 # 全部备份
+claude-fingerprint-detect clean                  # 全部清理
+claude-fingerprint-detect scan -v                # 查看会被清理的所有位置
+claude-fingerprint-detect verify                 # 检查残留
+claude-fingerprint-detect --lang en check        # 指定语言（en | zh | auto）
+claude-fingerprint-detect --help
 ```
 
 `clean --yes` 跳过确认，但不会删除启动项和项目中的文件。设置环境变量 `CFD_LANG=zh` 或 `CFD_LANG=en` 可固定语言。自动化脚本和 AI agent 请看 [AGENTS.md](AGENTS.md)。

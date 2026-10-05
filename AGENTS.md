@@ -13,23 +13,18 @@ A macOS command-line tool that finds what Claude (desktop app, Claude Code, Cowo
 ## Install
 
 ```bash
-git clone https://github.com/nsstream/claude-fingerprint-detect.git ~/claude-fingerprint-detect
-cd ~/claude-fingerprint-detect
+curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash
 ```
 
-Without git:
+This puts the code in `~/.claude-fingerprint-detect` and a `claude-fingerprint-detect` command in `~/.local/bin` (added to `PATH` in `~/.zshrc` or `~/.bash_profile` if needed). Running it again updates. Your current shell may not see the new `PATH`, so call the full path:
 
 ```bash
-mkdir -p ~/claude-fingerprint-detect && curl -fsSL https://github.com/nsstream/claude-fingerprint-detect/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1 -C ~/claude-fingerprint-detect
+~/.local/bin/claude-fingerprint-detect --version
 ```
 
-Verify:
+Uninstall: `curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash -s -- --uninstall` (keeps the folder if it holds backups or reports).
 
-```bash
-/usr/bin/python3 ~/claude-fingerprint-detect/claude_fingerprint_detect.py --version
-```
-
-If macOS prompts to install the Command Line Tools (or `python3` is missing), ask the user to run `xcode-select --install` and retry. Do not install other Python distributions for this.
+If the installer says Python 3 is missing, ask the user to run `xcode-select --install` and retry. Do not install other Python distributions for this.
 
 ## Rules for agents
 
@@ -55,7 +50,7 @@ Progress messages go to **stderr**; results go to **stdout**.
 
 ## Commands
 
-All commands: `/usr/bin/python3 claude_fingerprint_detect.py <command> [options] [--lang en|zh|auto]`
+All commands: `~/.local/bin/claude-fingerprint-detect <command> [options] [--lang en|zh|auto]`
 
 | Command | Purpose | Typical runtime |
 | --- | --- | --- |
@@ -74,21 +69,20 @@ Exit codes: `0` success, `1` backup was not created.
 When the user asks to "check / clean my Claude fingerprints":
 
 ```bash
-cd ~/claude-fingerprint-detect
-P=/usr/bin/python3
+P=~/.local/bin/claude-fingerprint-detect
 
 # 1. Check (read-only). Summarize the score and HIGH findings for the user.
-$P claude_fingerprint_detect.py check --json --lang en > /tmp/cfd_check.json
+$P check --json --lang en > /tmp/cfd_check.json
 
 # 2. Show what clean would remove (read-only), then ask for explicit approval.
-$P claude_fingerprint_detect.py scan --json --lang en > /tmp/cfd_scan.json
+$P scan --json --lang en > /tmp/cfd_scan.json
 
 # 3. Only after approval: back up, then clean (clean verifies at the end).
-$P claude_fingerprint_detect.py backup --yes --no-dmg --lang en
-$P claude_fingerprint_detect.py clean --yes --lang en
+$P backup --yes --no-dmg --lang en
+$P clean --yes --lang en
 
 # 4. Hand over the manual steps.
-$P claude_fingerprint_detect.py manual --lang en
+$P manual --lang en
 
 rm -f /tmp/cfd_check.json /tmp/cfd_scan.json
 ```
@@ -118,7 +112,7 @@ Tell the user where the backup is (`backups/<timestamp>/`, with `HOW_TO_RESTORE.
 
 ## Contributing
 
-- Files: `claude_fingerprint_detect.py` (catalog, scan, backup, clean, menu, CLI), `fingerprint_check.py` (fingerprint sections), `health_check.py` (report, scoring, extra checks), `i18n.py` (language detection and Chinese strings), `start.command` (double-click launcher).
+- Files: `install.sh` (installer / uninstaller), `claude_fingerprint_detect.py` (catalog, scan, backup, clean, menu, CLI), `fingerprint_check.py` (fingerprint sections), `health_check.py` (report, scoring, extra checks), `i18n.py` (language detection and Chinese strings), `start.command` (double-click launcher).
 - Keep Python 3.9 compatible (no `match`, no `X | Y` types), standard library only, no network calls.
 - Checks must stay read-only: open SQLite with `?immutable=1`, never read keychain secrets (`security find-*-password` without `-g`).
 - Never hard-code anything specific to one machine (user names, IDs, sizes, personal paths).

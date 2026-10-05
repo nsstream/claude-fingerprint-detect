@@ -522,7 +522,7 @@ ZH = {
         "  正在统计各标识在本机文件中的分布（跳过 30 MB 以上文件和虚拟机镜像）……\n",
     "(checked %d files in %.0f s)": "（共检查 %d 个文件，用时 %.0f 秒）",
     '\nClean everything now (back up first, then confirm)?': '\n现在全部清理吗（先备份，再确认）？',
-    '\nTo remove these traces, run: python3 %s clean': '\n要清除这些痕迹，运行：python3 %s clean',
+    '\nTo remove these traces, run: %s clean': '\n要清除这些痕迹，运行：%s clean',
     "HIGH": "高危", "MED": "中危", "LOW": "低危",
     '  - Advice: %s': '  - 建议：%s',
     '  1. Deletion mode: %s': '  1. 删除方式：%s',

@@ -12,13 +12,18 @@ See what Claude (the desktop app, Claude Code and Cowork) has left on your Mac t
 
 ## Quick start
 
-```bash
-git clone https://github.com/nsstream/claude-fingerprint-detect.git
-cd claude-fingerprint-detect
+Install the `claude-fingerprint-detect` command (into `~/.claude-fingerprint-detect`, nothing else is touched):
 
-python3 claude_fingerprint_detect.py check    # 1. fingerprint check (read-only)
-python3 claude_fingerprint_detect.py backup   # 2. back up
-python3 claude_fingerprint_detect.py clean    # 3. clean (shows what will be removed and asks first)
+```bash
+curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash
+```
+
+Then, in a new terminal window:
+
+```bash
+claude-fingerprint-detect check    # 1. fingerprint check (read-only)
+claude-fingerprint-detect backup   # 2. back up
+claude-fingerprint-detect clean    # 3. clean (shows what will be removed and asks first)
 ```
 
 `clean` removes **everything** Claude left behind, including the apps themselves — reinstall Claude afterwards if you want to keep using it. Prefer clicking? See [Get started](#get-started). Using an AI agent? Ask it:
@@ -112,17 +117,19 @@ Reports, backups and logs are written next to the tool, in `reports/`, `backups/
 
 Each backup folder has a `HOW_TO_RESTORE.txt`. In short: quit Claude, then in Terminal run `tar -xzf <archive>.tar.gz -C /` for the archive you need. Keychain passwords are never exported, so you sign in again after restoring.
 
-## Command line (optional)
+## Command line
+
+Installed with the Quick start command above (run it again to update; uninstall with `curl -fsSL https://raw.githubusercontent.com/nsstream/claude-fingerprint-detect/main/install.sh | bash -s -- --uninstall`).
 
 ```bash
-python3 claude_fingerprint_detect.py check                  # fingerprint check
-python3 claude_fingerprint_detect.py check --extra --save   # + credentials, secret leaks, system protection; save report
-python3 claude_fingerprint_detect.py backup                 # back up everything
-python3 claude_fingerprint_detect.py clean                  # remove everything
-python3 claude_fingerprint_detect.py scan -v                # see every location that would be cleaned
-python3 claude_fingerprint_detect.py verify                 # look for leftovers
-python3 claude_fingerprint_detect.py --lang zh check        # force a language (en | zh | auto)
-python3 claude_fingerprint_detect.py --help
+claude-fingerprint-detect check                  # fingerprint check
+claude-fingerprint-detect check --extra --save   # + credentials, secret leaks, system protection; save report
+claude-fingerprint-detect backup                 # back up everything
+claude-fingerprint-detect clean                  # remove everything
+claude-fingerprint-detect scan -v                # see every location that would be cleaned
+claude-fingerprint-detect verify                 # look for leftovers
+claude-fingerprint-detect --lang zh check        # force a language (en | zh | auto)
+claude-fingerprint-detect --help
 ```
 
 `clean --yes` skips the confirmation but never removes launch agents or files inside your projects. Set `CFD_LANG=zh` or `CFD_LANG=en` to fix the language. Automation and AI agents: see [AGENTS.md](AGENTS.md).
