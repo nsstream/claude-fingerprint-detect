@@ -727,7 +727,7 @@ def scan_all(items=None):
 
 # ───────────────────────── backup ─────────────────────────
 def dedupe(paths):
-    paths = sorted(set(os.path.abspath(p) for p in paths))
+    paths = sorted(set(os.path.abspath(p) for p in paths), key=lambda p: p.rstrip("/") + "/")
     out = []
     for p in paths:
         if out and (p == out[-1] or p.startswith(out[-1].rstrip("/") + "/")):
@@ -754,33 +754,62 @@ def do_backup(items, scan=None):
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = os.path.join(BACKUP_ROOT, ts)
 
-    by_cat, sizes = {}, {}
+    def big_ok(name, size):
+        if size <= BIG_ITEM:
+            return True
+        if SETTINGS["assume_yes"] and not SETTINGS["include_big"]:
+            log(T("Skipping large item %s (%s); add --include-big to include it") % (name, human(size)))
+            return False
+        if not SETTINGS["assume_yes"] and not confirm(T("%s is %s. Include it in the backup?") % (name, human(size)), False):
+            log(T("Skipping large item %s") % name)
+            return False
+        return True
+
+    by_cat, sizes, covered, skipped = {}, {}, [], []
     for it in items:
         targets, size, _ = scan[it["id"]]
-        if not targets:
+        if not targets or it.get("last"):
             continue
-        if size > BIG_ITEM:
-            if SETTINGS["assume_yes"] and not SETTINGS["include_big"]:
-                log(T("Skipping large item %s (%s); add --include-big to include it") % (it["name"], human(size)))
-                continue
-            if not SETTINGS["assume_yes"] and not confirm(T("%s is %s. Include it in the backup?") % (it["name"], human(size)), False):
-                log(T("Skipping large item %s") % it["name"])
-                continue
+        if not big_ok(it["name"], size):
+            skipped += targets
+            continue
         by_cat.setdefault(it["cat"], []).extend(targets)
         sizes[it["cat"]] = sizes.get(it["cat"], 0) + size
+        covered += targets
+
+    # The catch-all item overlaps everything above: archive only what no other item covers.
+    sweep, excludes, sweep_size = [], [], 0
+    known = dedupe(covered + skipped)
+    for it in items:
+        if not it.get("last"):
+            continue
+        for t in scan[it["id"]][0]:
+            root = t.rstrip("/") + "/"
+            if any(t == k or root.startswith(k.rstrip("/") + "/") for k in known):
+                continue
+            inner = [k for k in known if k.startswith(root)]
+            sweep.append(t)
+            excludes += inner
+            sweep_size += max(0, du(t) - sum(du(k) for k in inner))
+    if sweep and not big_ok(T("Everything else in the Claude folders"), sweep_size):
+        sweep = []
+
+    jobs = [(cat, CAT_NAME[cat], dedupe(ps), [], sizes.get(cat, 0)) for cat, ps in sorted(by_cat.items())]
+    if sweep:
+        jobs.append(("Z", T("Everything else in the Claude folders"), sweep, excludes, sweep_size))
 
     kc = [it for it in items if it["kind"] == "keychain"]
-    if not by_cat and not kc:
+    if not jobs and not kc:
         print(YELLOW(T("No Claude traces found on this Mac; nothing to back up.")))
         return None
 
     heading(T("Backup plan"), T("Destination: %s") % dest.replace(HOME, "~"))
-    for cat, ps in sorted(by_cat.items()):
-        n = len(dedupe(ps))
-        row(CAT_NAME[cat], (T("1 path") if n == 1 else T("%d paths") % n) + ", " + BOLD(human(sizes.get(cat, 0))))
+    for _, label, paths, _, size in jobs:
+        n = len(paths)
+        row(label, (T("1 path") if n == 1 else T("%d paths") % n) + ", " + BOLD(human(size)))
     if kc:
         row(T("Keychain"), T("entry metadata only"))
-    total = sum(sizes.values())
+    total = sum(j[4] for j in jobs)
     free = shutil.disk_usage(TOOL_DIR).free
     print()
     row(BOLD(T("Total before compression")), BOLD(human(total)))
@@ -794,25 +823,27 @@ def do_backup(items, scan=None):
 
     os.makedirs(dest, exist_ok=True)
     manifest = {"created": ts, "host_user": getpass.getuser(), "archives": {}}
-    for cat, ps in sorted(by_cat.items()):
-        paths = dedupe(ps)
+    for key, label, paths, excl, _ in jobs:
         sudo = any(not os.access(p, os.R_OK) for p in paths)
-        archive = os.path.join(dest, "%s_%s.tar.gz" % (cat, re.sub(r"[^\w]+", "_", CAT_NAME[cat])[:30].strip("_")))
+        archive = os.path.join(dest, "%s_%s.tar.gz" % (key, re.sub(r"[^\w]+", "_", label)[:30].strip("_")))
         listfile = archive + ".list"
         with open(listfile, "w", encoding="utf-8") as f:
             for p in paths:
                 f.write(p.lstrip("/") + "\n")
+        cmd = ["tar", "-czf", archive, "-C", "/"]
+        for e in excl:
+            cmd += ["--exclude", re.sub(r"([\[\]*?\\])", r"\\\1", e.lstrip("/"))]
         if sys.stdout.isatty():
-            sys.stdout.write("  " + DIM("… " + CAT_NAME[cat]))
+            sys.stdout.write("  " + DIM("… " + label))
             sys.stdout.flush()
-        rc, out = run(["tar", "-czf", archive, "-C", "/", "-T", listfile], sudo=sudo)
+        rc, out = run(cmd + ["-T", listfile], sudo=sudo)
         if sys.stdout.isatty():
             sys.stdout.write("\r\033[K")
-        row((GREEN("✓ ") if rc == 0 else YELLOW("! ")) + CAT_NAME[cat], human(du(archive)) if os.path.exists(archive) else "")
-        manifest["archives"][os.path.basename(archive)] = {"category": CAT_NAME[cat], "paths": paths,
+        row((GREEN("✓ ") if rc == 0 else YELLOW("! ")) + label, human(du(archive)) if os.path.exists(archive) else "")
+        manifest["archives"][os.path.basename(archive)] = {"category": label, "paths": paths, "excluded": excl,
                                                           "tar_rc": rc}
         if rc != 0:
-            log(YELLOW(T("  [%s] tar exited with %d (some files may be unreadable or in use); archived what it could") % (cat, rc)))
+            log(YELLOW(T("  [%s] tar exited with %d (some files may be unreadable or in use); archived what it could") % (label, rc)))
         os.remove(listfile)
     for it in kc:
         with open(os.path.join(dest, "keychain_metadata.txt"), "w", encoding="utf-8") as f:
@@ -1024,10 +1055,10 @@ def do_clean(items, scan=None):
         return
     todo.sort(key=lambda it: (bool(it.get("last")), it["id"]))
 
-    total, cur = 0, None
+    total = sum(du(p) for p in dedupe([t for it in todo for t in scan[it["id"]][0]]))
+    cur = None
     for it in sorted(todo, key=lambda it: it["id"]):
         targets, size, desc = scan[it["id"]]
-        total += size
         if it["cat"] != cur:
             cur = it["cat"]
             heading(CAT_NAME[cur])
