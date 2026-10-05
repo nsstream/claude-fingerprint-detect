@@ -49,7 +49,7 @@ cfd clean    # 3. 清理（先列出要删除的内容，确认后才执行）
 - `clean` 会清除 Claude 留下的**全部**内容，包括应用本身，并退出登录；还要继续用的话，重新安装并登录即可。
 - 如果 Claude 正在运行，工具会请你退出它（否则它会把文件写回去）。
 - 清理 Shell 历史后，请关闭所有终端窗口再重新打开。
-- 项目里的 `CLAUDE.md`、`.claude/` 等文件总是逐个确认。
+- 项目里的 `CLAUDE.md`、`.claude/`、`.mcp.json` 只检测、不删除，也不备份。
 
 ## 检查哪些内容
 
@@ -66,7 +66,7 @@ cfd clean    # 3. 清理（先列出要删除的内容，确认后才执行）
 | Shell 历史 | 提到 claude / anthropic 的命令 |
 | 其他浏览器 | Chrome、Edge、Brave、Arc、Vivaldi、Chromium 中 claude.ai / anthropic.com 的 Cookie 与历史 |
 | 第三方工具 | Cursor、JetBrains、Bun 中的 Claude 插件 |
-| 你的项目 | 常见项目目录中的 `.claude/`、`CLAUDE.md`、`.mcp.json` |
+| 你的项目 | 常见项目目录中的 `.claude/`、`CLAUDE.md`、`.mcp.json`（只列出，不删除） |
 
 ## 之后如何减少暴露
 

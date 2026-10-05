@@ -41,7 +41,8 @@ If the installer says Python 3 is missing, ask the user to run `xcode-select --i
 | Situation | Behavior |
 | --- | --- |
 | `clean` without `--yes` | Asks the user to type `DELETE`; with no TTY it cancels and deletes nothing. |
-| `clean --yes` | Skips the confirmation. Never removes launch agents or files inside the user's projects; those are skipped with a message. |
+| `clean --yes` | Skips the confirmation. Never removes launch agents; those are skipped with a message. |
+| `clean`, files inside the user's projects (`.claude/`, `CLAUDE.md`, `.mcp.json`) | Never deleted or backed up, with or without `--yes`; only listed as kept. |
 | `backup` with no TTY on stdin | The encrypted DMG step is skipped (it needs a password). Pass `--no-dmg` to make this explicit. |
 | `backup --yes`, items larger than 2 GB (usually the Cowork VM) | Skipped unless `--include-big`. `clean` still removes them. |
 | `backup`, apps / binaries / caches / logs / telemetry / embedded-browser login state | Never archived (re-downloadable or regenerated). `clean` still removes them. |
@@ -58,7 +59,7 @@ All commands: `~/.local/bin/cfd <command> [options] [--lang en|zh|auto]`
 | `check [--json] [--save]` | Fingerprint check with score and findings (read-only) | seconds |
 | `check --extra` / `check --deep` | + credentials, secret scan, external traces, system protection | ~2 / 10+ min |
 | `backup [--yes] [--no-dmg] [--include-big]` | Archive every Claude trace into `backups/<timestamp>/` | depends on size |
-| `clean [--yes] [--rm] [--repo-root DIR]` | Remove every Claude trace (Trash by default), then verify | depends on size |
+| `clean [--yes] [--rm]` | Remove every Claude trace (Trash by default), then verify | depends on size |
 | `scan [--json] [-v]` | Every location `clean` would touch, with sizes (read-only) | seconds |
 | `verify` | Look for leftovers (read-only) | seconds |
 | `manual` | Steps the tool cannot do locally (browser extension, phone, Time Machine, key rotation) | instant |

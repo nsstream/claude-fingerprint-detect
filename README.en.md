@@ -49,7 +49,7 @@ Using an AI agent? Ask it:
 - `clean` removes **everything** Claude left behind, including the apps themselves, and signs you out. Reinstall and log in again if you keep using Claude.
 - If Claude is running, the tool asks to quit it (otherwise it would write the files back).
 - After cleaning shell history, close all Terminal windows and open new ones.
-- Project files such as `CLAUDE.md` or `.claude/` inside your projects are always confirmed one by one.
+- Project files such as `CLAUDE.md`, `.claude/` or `.mcp.json` inside your projects are only reported, never deleted or backed up.
 
 ## What it looks at
 
@@ -66,7 +66,7 @@ Using an AI agent? Ask it:
 | Shell history | commands mentioning claude / anthropic |
 | Other browsers | claude.ai / anthropic.com cookies and history in Chrome, Edge, Brave, Arc, Vivaldi, Chromium |
 | Third-party tools | Claude plugins in Cursor, JetBrains, Bun |
-| Your projects | `.claude/`, `CLAUDE.md`, `.mcp.json` in common project folders |
+| Your projects | `.claude/`, `CLAUDE.md`, `.mcp.json` in common project folders (listed, never deleted) |
 
 ## Keep it quiet afterwards
 

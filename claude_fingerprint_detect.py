@@ -457,7 +457,8 @@ ITEMS = [
          paths=["~/.codex/config.toml", "~/.config/opencode/*.json", "~/.cursor/mcp.json"]),
 
     # L project repositories
-    item("L1", "L", 3, T(".claude folders, CLAUDE.md, .mcp.json inside projects (confirmed one by one)"), kind="repo"),
+    item("L1", "L", 3, T(".claude folders, CLAUDE.md, .mcp.json inside projects (report only, never deleted)"),
+         kind="report_repo"),
 ]
 ITEM_BY_ID = {it["id"]: it for it in ITEMS}
 
@@ -681,10 +682,12 @@ def resolve(it):
                             % (bname, prof, nc, nh, nl, len(idb)))
                 targets += cookies + [x for x in (hist, login) if x] + idb
         return targets, sum(du(t) for t in targets), desc
-    if k == "repo":
-        t = repo_hits()
-        return t, sum(du(x) for x in t), [x.replace(HOME, "~") for x in t]
+    if k == "report_repo":
+        return [], 0, [x.replace(HOME, "~") for x in repo_hits()]
     return [], 0, []
+
+
+REPORT_KINDS = ("report_rc", "report_grep", "report_repo")
 
 
 def has_content(it, targets, desc):
@@ -1013,24 +1016,6 @@ def clean_launchagents(it):
         remove_path(f)
 
 
-def clean_repo(targets):
-    if SETTINGS["assume_yes"]:
-        log(YELLOW(T("  skipped %d project files (--yes never removes them; run without --yes to confirm each)") % len(targets)))
-        return
-    print(YELLOW(T("  Confirm each: y=delete  n=keep  a=delete all remaining  q=stop")))
-    all_yes = False
-    for p in targets:
-        if not all_yes:
-            s = ask("  %s  (%s) [y/n/a/q] " % (p.replace(HOME, "~"), human(du(p)))).lower()
-            if s == "q":
-                break
-            if s == "a":
-                all_yes = True
-            elif s != "y":
-                continue
-        remove_path(p)
-
-
 def claude_processes():
     """Match on the executable path so shells whose arguments merely mention "claude" are ignored."""
     rc, out = run(["ps", "-axo", "pid=,comm="])
@@ -1073,7 +1058,10 @@ def do_clean(items, scan=None):
         if it["cat"] != cur:
             cur = it["cat"]
             heading(CAT_NAME[cur])
-        row(RED("✗ ") + it["name"], BOLD(human(size)) if size else "")
+        if it["kind"] in REPORT_KINDS:
+            row(YELLOW("! ") + it["name"], YELLOW(T("kept")))
+        else:
+            row(RED("✗ ") + it["name"], BOLD(human(size)) if size else "")
         lines = desc if it["kind"] == "history" else (targets or desc)
         for t in lines[:3]:
             emit(t.replace(HOME, "~"), 6, color=DIM, hard=True)
@@ -1082,9 +1070,10 @@ def do_clean(items, scan=None):
             print("      " + DIM(T("... and %d more") % more))
     mode = T("move to Trash") if SETTINGS["delete_mode"] == "trash" else RED(T("delete permanently (cannot be undone)"))
     print()
-    box([BOLD(RED(T("About to remove everything above, including the Claude apps"))),
+    box([BOLD(RED(T("About to remove everything marked ✗ above, including the Claude apps"))),
          "",
-         T("  Items: %d    Size: %s    Mode: %s") % (len(todo), BOLD(human(total)), mode)])
+         T("  Items: %d    Size: %s    Mode: %s") % (sum(it["kind"] not in REPORT_KINDS for it in todo),
+                                                   BOLD(human(total)), mode)])
 
     if not SETTINGS["assume_yes"] and ask("\n" + T("Type %s to continue, anything else cancels: ") % BOLD(RED("DELETE"))) != "DELETE":
         print(DIM(T("Cancelled. Nothing was deleted.")))
@@ -1115,8 +1104,8 @@ def do_clean(items, scan=None):
             clean_chrome()
         elif k == "launchagent":
             clean_launchagents(it)
-        elif k == "repo":
-            clean_repo(targets)
+        elif k == "report_repo":
+            print(DIM(T("  Kept: project files are never deleted; remove them yourself if you want.")))
         elif k in ("report_rc", "report_grep"):
             print(YELLOW(T("  These locations need manual editing:")))
             for d in desc:
@@ -1130,7 +1119,7 @@ def do_clean(items, scan=None):
 def do_verify():
     _size_cache.clear()
     scan = scan_all()
-    left = [it for it in ITEMS if has_content(it, scan[it["id"]][0], scan[it["id"]][2])]
+    left = [it for it in ITEMS if it["kind"] not in REPORT_KINDS and has_content(it, scan[it["id"]][0], scan[it["id"]][2])]
     heading(T("Verify"))
     if not left:
         log(GREEN("✓ " + T("Verification passed: no leftovers at any known risk location.")))
@@ -1293,8 +1282,7 @@ def cli(argv):
 
     p = sub.add_parser("clean", help=T("remove every Claude trace"))
     p.add_argument("--rm", action="store_true", help=T("delete permanently (default: move to Trash)"))
-    p.add_argument("--yes", action="store_true", help=T("auto-confirm everything (quits Claude / browser processes; never removes launch agents or project files)"))
-    p.add_argument("--repo-root", metavar="DIR", action="append", help=T("project scan root, may be repeated"))
+    p.add_argument("--yes", action="store_true", help=T("auto-confirm everything (quits Claude / browser processes; never removes launch agents)"))
 
     p = sub.add_parser("scan", help=T("list every location that would be cleaned, with sizes"))
     p.add_argument("-v", "--verbose", action="store_true", help=T("show paths"))
@@ -1361,8 +1349,6 @@ def cli(argv):
 
     if args.cmd == "clean":
         SETTINGS["delete_mode"] = "rm" if args.rm else "trash"
-        if args.repo_root:
-            SETTINGS["repo_roots"] = args.repo_root
         if do_clean(ITEMS):
             do_verify()
         return 0

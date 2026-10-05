@@ -148,8 +148,6 @@ ZH = {
     "Claude plugins & caches in Cursor / Bun / JetBrains": "Cursor / Bun / JetBrains 中的 Claude 插件与缓存",
     "Anthropic references in other tools' configs (report only, edit manually)":
         "其他工具配置中对 Anthropic 的引用（只报告，需手动修改）",
-    ".claude folders, CLAUDE.md, .mcp.json inside projects (confirmed one by one)":
-        "项目中的 .claude 目录、CLAUDE.md、.mcp.json（逐个确认）",
 
     # ───────────── manual checklist ─────────────
     "Chrome: remove the Claude extension at chrome://extensions (fcoeoabgfenejglbffodgkkbkcdhcgfn); if sync is on, also delete at myactivity.google.com.":
@@ -229,9 +227,7 @@ ZH = {
     "  %s/%s %s: deleted %d rows": "  %s/%s %s：删除 %d 行",
     "  failed to modify %s: %s": "  修改 %s 失败：%s",
     "  skipped (--yes never removes launch agents; run without --yes to confirm): %s": "  已跳过（--yes 不会删除启动项，去掉 --yes 可逐个确认）：%s",
-    "  skipped %d project files (--yes never removes them; run without --yes to confirm each)": "  已跳过 %d 个项目文件（--yes 不会删除它们，去掉 --yes 可逐个确认）",
     "  Unload and delete this launch agent?": "  卸载并删除这个启动项？",
-    "  Confirm each: y=delete  n=keep  a=delete all remaining  q=stop": "  逐个确认：y=删除  n=保留  a=剩余全部删除  q=停止",
     "\nClaude-related processes are running (if left running they will write the files back):":
         "\n检测到 Claude 相关进程在运行（不退出的话会把文件重新写回）：",
     "Quit these processes now?": "现在退出这些进程？",
@@ -265,9 +261,6 @@ ZH = {
     "include items larger than 2 GB (e.g. the Cowork VM)": "包含大于 2 GB 的项（如 Cowork 虚拟机）",
     "skip the encrypted DMG": "不做加密 DMG",
     "delete permanently (default: move to Trash)": "直接删除（默认移到废纸篓）",
-    "auto-confirm everything (quits Claude / browser processes; never removes launch agents or project files)":
-        "全部自动确认（会退出 Claude / 浏览器进程；不会删除启动项和项目文件）",
-    "project scan root, may be repeated": "项目扫描目录，可重复指定",
     "look for leftovers": "检查残留",
     "manual checklist": "手动事项清单",
     "\nFound %d / %d items, %s in total": "\n发现 %d / %d 项，共 %s",
@@ -506,7 +499,6 @@ ZH = {
     "+ Extras, deep": "+ 附加项（深度）",
     "+ credentials, secret leaks, external traces, system protection · ~2 min": "+ 凭据、密钥泄露、外部痕迹、系统防护 · 约 2 分钟",
     "+ secret scan of the Cowork data disk · ~10 min": "+ 扫描 Cowork 数据盘中的密钥 · 约 10 分钟",
-    "About to remove everything above, including the Claude apps": "即将删除以上全部内容，包括 Claude 应用",
     "Back": "返回",
     "Backup": "备份",
     "Cancelled. Nothing was deleted.": "已取消，没有删除任何东西。",
@@ -544,4 +536,9 @@ ZH = {
     "\nexamples:\n  %(prog)s check     fingerprint check (read-only)\n  %(prog)s backup    back up every Claude trace to backups/\n  %(prog)s clean     remove every Claude trace (lists everything and asks first)\n\nRun without arguments for the interactive menu.\n": "\n示例：\n  %(prog)s check     指纹体检（只读）\n  %(prog)s backup    把所有 Claude 痕迹备份到 backups/\n  %(prog)s clean     清除所有 Claude 痕迹（先列出全部内容并确认）\n\n不带参数运行进入交互菜单。\n",
     "Everything else in the Claude folders": "Claude 目录里的其余文件",
     "Not backed up: apps, caches, logs, login state (regenerated)": "不备份：应用、缓存、日志、登录态（可再生）",
+    "  Kept: project files are never deleted; remove them yourself if you want.": "  已保留：项目文件不会被删除，如有需要请自行处理。",
+    ".claude folders, CLAUDE.md, .mcp.json inside projects (report only, never deleted)": "项目里的 .claude 文件夹、CLAUDE.md、.mcp.json（只检测，不删除）",
+    "auto-confirm everything (quits Claude / browser processes; never removes launch agents)": "全部自动确认（会退出 Claude / 浏览器进程；不会删除启动项）",
+    "kept": "保留",
+    "About to remove everything marked ✗ above, including the Claude apps": "即将删除以上标 ✗ 的全部内容，包括 Claude 应用",
 }
