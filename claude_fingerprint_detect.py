@@ -1,0 +1,1338 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+claude-fingerprint-detect: fingerprint check, scan, backup, clean and verify Claude traces on macOS.
+
+Standard library only; works with the python3 (3.9) that ships with macOS. Makes no network requests.
+Nothing is deleted without confirmation: every clean shows a preview first, and a dry-run mode is available.
+"""
+import datetime
+import getpass
+import glob
+import json
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import urllib.parse
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import i18n
+from i18n import T
+
+i18n.init(sys.argv)
+
+__version__ = "1.0.0"
+HOME = os.path.expanduser("~")
+TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKUP_ROOT = os.path.join(TOOL_DIR, "backups")
+LOG_ROOT = os.path.join(TOOL_DIR, "logs")
+REPORT_ROOT = os.path.join(TOOL_DIR, "reports")
+TMP = os.environ.get("TMPDIR", "/tmp").rstrip("/")
+AS = "~/Library/Application Support/Claude"
+DOMAINS = ["claude.ai", "claude.com", "anthropic.com", "claudeusercontent.com"]
+KEYWORDS = [b"claude", b"anthropic"]
+BIG_ITEM = 2 * 1024 ** 3
+FULLWIDTH_COMMA = "\uff0c"
+REPO_ROOT_CANDIDATES = ["~/Workspace", "~/Projects", "~/Developer", "~/Code", "~/code", "~/src", "~/dev",
+                        "~/repos", "~/GitHub", "~/git", "~/Documents/GitHub"]
+
+
+def default_repo_roots():
+    roots, seen = [], set()
+    for r in REPO_ROOT_CANDIDATES:
+        real = os.path.realpath(os.path.expanduser(r)).lower()
+        if os.path.isdir(real) and real not in seen:
+            seen.add(real)
+            roots.append(r)
+    return roots
+
+
+SETTINGS = {
+    "dry_run": False,
+    "delete_mode": "trash",          # trash | rm
+    "repo_roots": default_repo_roots(),
+    "assume_yes": False,             # CLI --yes: answer "yes" to every confirmation
+    "include_big": False,            # CLI --include-big: include items larger than 2 GB in backups
+    "dmg": True,                     # CLI --no-dmg: skip the encrypted DMG step
+}
+
+# ───────────────────────── terminal output ─────────────────────────
+def c(text, code):
+    return "\033[%sm%s\033[0m" % (code, text) if sys.stdout.isatty() else text
+
+RED = lambda t: c(t, "31")
+GREEN = lambda t: c(t, "32")
+YELLOW = lambda t: c(t, "33")
+CYAN = lambda t: c(t, "36")
+BOLD = lambda t: c(t, "1")
+DIM = lambda t: c(t, "2")
+
+LEVEL_NAME = {1: RED(T("HIGH")), 2: YELLOW(T("MED ")), 3: DIM(T("LOW "))}
+
+_log_fp = None
+
+
+def log(msg, echo=True):
+    global _log_fp
+    if _log_fp is None:
+        os.makedirs(LOG_ROOT, exist_ok=True)
+        name = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S.log")
+        _log_fp = open(os.path.join(LOG_ROOT, name), "a", encoding="utf-8")
+    _log_fp.write("[%s] %s\n" % (datetime.datetime.now().strftime("%H:%M:%S"), re.sub(r"\033\[[0-9;]*m", "", msg)))
+    _log_fp.flush()
+    if echo:
+        print(msg)
+
+
+_stdin_closed = False
+
+
+def ask(prompt, default=""):
+    global _stdin_closed
+    try:
+        s = input(prompt).strip()
+    except EOFError:
+        print()
+        _stdin_closed = True
+        return default
+    return s or default
+
+
+def confirm(prompt, default=False):
+    if SETTINGS["assume_yes"]:
+        print(T("%s [auto: yes]") % prompt)
+        return True
+    hint = "[Y/n]" if default else "[y/N]"
+    s = ask("%s %s " % (prompt, hint)).lower()
+    if not s:
+        return default
+    return s in ("y", "yes")
+
+
+def split_list(v):
+    return [x.strip().upper() for x in (v or "").replace(FULLWIDTH_COMMA, ",").split(",") if x.strip()]
+
+
+def human(n):
+    for unit in ("B", "K", "M", "G", "T"):
+        if n < 1024 or unit == "T":
+            return ("%.1f%s" % (n, unit)) if unit != "B" else ("%d%s" % (n, unit))
+        n /= 1024.0
+
+
+def run(cmd, sudo=False, capture=True):
+    if sudo:
+        cmd = ["sudo"] + cmd
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE if capture else None,
+                           stderr=subprocess.PIPE if capture else None)
+        out = (p.stdout or b"").decode("utf-8", "replace") if capture else ""
+        return p.returncode, out
+    except FileNotFoundError:
+        return 127, ""
+
+# ───────────────────────── risk catalog ─────────────────────────
+CATEGORIES = [
+    ("A", T("Identity & credentials")),
+    ("B", T("Sessions & content")),
+    ("C", T("Telemetry, logs & crash reports")),
+    ("D", T("Cowork virtual machine")),
+    ("E", T("Desktop app embedded browser data (cookies / storage / cache)")),
+    ("F", T("Config, MCP, plugins & skills")),
+    ("G", T("Application files & leftover directories")),
+    ("H", T("macOS system integration traces")),
+    ("I", T("Shell history")),
+    ("J", T("External browsers (Chromium family)")),
+    ("K", T("Claude leftovers in third-party tools")),
+    ("L", T("Claude files inside project repositories")),
+]
+CAT_NAME = dict(CATEGORIES)
+
+NMH = "NativeMessagingHosts/com.anthropic.*"
+BROWSER_ROOTS = {
+    "Chrome": ("~/Library/Application Support/Google/Chrome", "Google Chrome"),
+    "Chromium": ("~/Library/Application Support/Chromium", "Chromium"),
+    "Edge": ("~/Library/Application Support/Microsoft Edge", "Microsoft Edge"),
+    "Brave": ("~/Library/Application Support/BraveSoftware/Brave-Browser", "Brave Browser"),
+    "Arc": ("~/Library/Application Support/Arc/User Data", "Arc"),
+    "Vivaldi": ("~/Library/Application Support/Vivaldi", "Vivaldi"),
+}
+
+
+def item(id, cat, level, name, kind="path", paths=(), note="", sudo=False, **kw):
+    d = dict(id=id, cat=cat, level=level, name=name, kind=kind, paths=list(paths), note=note, sudo=sudo)
+    d.update(kw)
+    return d
+
+
+ITEMS = [
+    # A identity & credentials
+    item("A1", "A", 1, T("Claude Code account & device IDs (userID / machineID / oauthAccount / email) and all backups"),
+         paths=["~/.claude.json", "~/.claude.json.*"],
+         note=T("Deleting only the main file is not enough: .backup / .bak* hold the same userID")),
+    item("A2", "A", 1, T("Claude Code config backup directory"), paths=["~/.claude/backups"]),
+    item("A3", "A", 1, T("Claude Code plaintext OAuth tokens"), paths=["~/.claude/.credentials.json"]),
+    item("A4", "A", 1, T("Desktop app device ID (ant-did), device registry, hardware probe"),
+         paths=[AS + "/ant-did", AS + "/ant-device-registry.json", AS + "/vm-support-probe.json"]),
+    item("A5", "A", 1, T("Desktop app account config, tokens and remote-session bridge state"),
+         paths=[AS + "/config.json", AS + "/config.json.journal", AS + "/buddy-tokens.json",
+                AS + "/bridge-state.json"]),
+    item("A6", "A", 1, T("Claude / Anthropic keychain entries"), kind="keychain",
+         generic_services=["Claude Code-credentials", "Claude Safe Storage", "Claude Code", "Claude"],
+         generic_accounts=["Claude Key"],
+         internet_servers=["claude.ai", "anthropic.com", "console.anthropic.com", "claude.com"],
+         note=T("Backups record entry metadata only; secrets are not exported")),
+
+    # B sessions & content
+    item("B1", "B", 1, T("Claude Code prompt history (every prompt you typed)"), paths=["~/.claude/history.jsonl"]),
+    item("B2", "B", 1, T("Claude Code full session transcripts"), paths=["~/.claude/projects", "~/.claude/sessions",
+                                                                    "~/.claude/transcripts", "~/.claude/todos"]),
+    item("B3", "B", 2, T("File snapshots, paste cache, shell / environment snapshots (may contain secrets)"),
+         paths=["~/.claude/file-history", "~/.claude/paste-cache", "~/.claude/shell-snapshots",
+                "~/.claude/session-env"]),
+    item("B4", "B", 1, T("Desktop app Code / Cowork sessions, pending uploads, space memory"),
+         paths=[AS + "/claude-code-sessions", AS + "/local-agent-mode-sessions", AS + "/pending-uploads",
+                AS + "/git-shadow", AS + "/git-worktrees.json", AS + "/space-memory-copy",
+                AS + "/spaces-present", AS + "/plan-usage-history.json", AS + "/cowork-enabled-cli-ops.json"],
+         note=T("local_*.json contains your email, system prompt and mounted folders")),
+    item("B5", "B", 2, T("Debug logs, feedback drafts, downloads"), paths=["~/.claude/debug", "~/.claude/feedback",
+                                                                        "~/.claude/downloads"]),
+
+    # C telemetry / logs
+    item("C1", "C", 1, T("Claude Code telemetry leftovers & stats cache"),
+         paths=["~/.claude/telemetry", "~/.claude/statsig", "~/.claude/stats-cache.json",
+                "~/.claude/mcp-needs-auth-cache.json", "~/.claude/.last-cleanup",
+                "~/.claude/.last-update-result.json"]),
+    item("C2", "C", 2, T("Desktop app Sentry / Crashpad / performance observer DB"),
+         paths=[AS + "/sentry", AS + "/Crashpad", AS + "/declarative_performance_observer.db",
+                AS + "/declarative_performance_observer.db-journal", AS + "/DIPS"]),
+    item("C3", "C", 2, T("Desktop app logs"), paths=["~/Library/Logs/Claude"]),
+    item("C4", "C", 2, T("macOS crash reports (file names contain the hardware UUID)"),
+         paths=["~/Library/Application Support/CrashReporter/Claude_*.plist",
+                "~/Library/Application Support/CrashReporter/claude*.plist",
+                "~/Library/Logs/DiagnosticReports/*[Cc]laude*"]),
+    item("C5", "C", 3, T("System-wide crash reports (requires sudo)"), paths=["/Library/Logs/DiagnosticReports/*[Cc]laude*"],
+         sudo=True),
+
+    # D Cowork
+    item("D1", "D", 1, T("Cowork VM images & session data disk (unencrypted, contains copies of secrets)"),
+         paths=[AS + "/vm_bundles"], note=T("Usually several GB; holds the VM UUID / MAC address")),
+    item("D2", "D", 2, T("Claude Code VM runtime"), paths=[AS + "/claude-code-vm"]),
+
+    # E embedded browser
+    item("E1", "E", 1, T("Desktop app cookies & site storage (login state, ajs_*, analytics IDs)"),
+         paths=[AS + "/Cookies", AS + "/Cookies-journal", AS + "/Local Storage", AS + "/IndexedDB",
+                AS + "/Session Storage", AS + "/Partitions", AS + "/WebStorage", AS + "/SharedStorage",
+                AS + "/Trust Tokens", AS + "/Trust Tokens-journal", AS + "/Network Persistent State",
+                AS + "/TransportSecurity", AS + "/blob_storage", AS + "/Shared Dictionary",
+                AS + "/shared_proto_db", AS + "/Local State", AS + "/Preferences"]),
+    item("E2", "E", 3, T("Desktop app caches (HTTP / code / GPU)"),
+         paths=[AS + "/Cache", AS + "/Code Cache", AS + "/GPUCache", AS + "/DawnGraphiteCache",
+                AS + "/DawnWebGPUCache", AS + "/VideoDecodeStats", AS + "/fcache"]),
+
+    # F config
+    item("F1", "F", 1, T("MCP configs and their backups (may contain third-party tokens)"),
+         paths=["~/.claude/.mcp.json", "~/.claude/.mcp.json.*", AS + "/claude_desktop_config.json",
+                AS + "/claude_desktop_config.json.*"]),
+    item("F2", "F", 2, T("Claude Code settings, plugins, skills, subagents, rules (incl. synced skill folders)"),
+         paths=["~/.claude/settings.json", "~/.claude/settings.local.json", "~/.claude/plugins",
+                "~/.claude/skills", "~/.claude/agents", "~/.claude/rules", "~/.claude/ide",
+                "~/.claude/chrome", "~/.claude/state", "~/.claude/cache"]),
+    item("F3", "F", 3, T("Desktop app extensions, skills and window state"),
+         paths=[AS + "/Claude Extensions", AS + "/Claude Extensions Settings", AS + "/skills",
+                AS + "/extensions-blocklist.json", AS + "/extensions-installations.json",
+                AS + "/ca-bundle.pem", AS + "/window-state.json"]),
+
+    # G application files
+    item("G1", "G", 3, T("Claude desktop application"), paths=["/Applications/Claude.app",
+                                                            "~/Applications/Claude Code URL Handler.app"]),
+    item("G2", "G", 3, T("Claude Code binaries & state"),
+         paths=["~/.local/bin/claude", "~/.local/share/claude", "~/.local/state/claude", "~/.cache/claude",
+                AS + "/claude-code"]),
+    item("G3", "G", 3, T("Application caches & temp files"), paths=["~/Library/Caches/claude-cli-nodejs",
+                                                                 "~/Library/Caches/com.anthropic.*",
+                                                                 "/private/tmp/claude-mcp-browser-bridge-*",
+                                                                 TMP + "/claude*", TMP + "/*anthropic*"]),
+    item("G4", "G", 2, T("Remove leftover directories entirely (~/.claude, desktop app data dir, Claude-3p)"),
+         paths=["~/.claude", AS, "~/Library/Application Support/Claude-3p"],
+         note=T("Catch-all item, always runs last"), last=True),
+
+    # H system integration
+    item("H1", "H", 2, T("Preference plists (ByHost file name contains the hardware UUID)"), kind="prefs",
+         paths=["~/Library/Preferences/com.anthropic.*.plist",
+                "~/Library/Preferences/ByHost/com.anthropic.*.plist"]),
+    item("H2", "H", 2, T("\"Recent documents\" record"),
+         paths=["~/Library/Application Support/com.apple.sharedfilelist/"
+                "com.apple.LSSharedFileList.ApplicationRecentDocuments/com.anthropic.*"]),
+    item("H3", "H", 2, T("HTTPStorages / saved application state / WebKit / sandbox containers"),
+         paths=["~/Library/HTTPStorages/com.anthropic.*",
+                "~/Library/Saved Application State/com.anthropic.*",
+                "~/Library/WebKit/com.anthropic.*", "~/Library/Containers/*anthropic*",
+                "~/Library/Group Containers/*anthropic*"]),
+    item("H4", "H", 2, T("Browser native messaging hosts (Claude browser extension bridge)"),
+         paths=[os.path.join(r, NMH) for r, _ in BROWSER_ROOTS.values()]),
+    item("H5", "H", 2, T("LaunchAgents that invoke Claude"), kind="launchagent",
+         paths=["~/Library/LaunchAgents/*.plist"]),
+
+    # I shell
+    item("I1", "I", 2, T("Shell history entries mentioning claude / anthropic"), kind="history",
+         paths=["~/.zsh_history", "~/.bash_history"]),
+    item("I2", "I", 3, T("Claude env vars / aliases in shell rc files (report only, edit manually)"), kind="report_rc",
+         paths=["~/.zshrc", "~/.zprofile", "~/.zshenv", "~/.bashrc", "~/.bash_profile", "~/.profile"]),
+
+    # J external browsers
+    item("J1", "J", 2, T("claude / anthropic cookies, history, saved passwords, IndexedDB in Chromium browsers"),
+         kind="chrome", note=T("Quit the browser first; Safari is covered in the manual checklist")),
+
+    # K third-party
+    item("K1", "K", 3, T("Claude plugins & caches in Cursor / Bun / JetBrains"),
+         paths=["~/.cursor/plugins/cache/claude-plugins-official",
+                "~/.cursor/plugins/marketplaces/claude-plugins-official",
+                "~/.bun/install/cache/opencode-anthropic-auth*",
+                "~/Library/Application Support/JetBrains/*/plugins/claude-code-jetbrains-plugin"]),
+    item("K2", "K", 3, T("Anthropic references in other tools' configs (report only, edit manually)"), kind="report_grep",
+         paths=["~/.codex/config.toml", "~/.config/opencode/*.json", "~/.cursor/mcp.json"]),
+
+    # L project repositories
+    item("L1", "L", 3, T(".claude folders, CLAUDE.md, .mcp.json inside projects (confirmed one by one)"), kind="repo"),
+]
+ITEM_BY_ID = {it["id"]: it for it in ITEMS}
+
+MANUAL_TODO = [
+    T("Chrome: remove the Claude extension at chrome://extensions (fcoeoabgfenejglbffodgkkbkcdhcgfn); if sync is on, also delete at myactivity.google.com."),
+    T("Safari: search history for \"claude\" and delete; Settings > Privacy > Manage Website Data, remove claude.ai / anthropic.com."),
+    T("claude.ai > Settings: sign out other devices and sessions; review connected integrations."),
+    T("Mobile app: signing out does not wipe local data; delete the app."),
+    T("Other computers / remote dev boxes: each has its own set of traces and must be cleaned separately."),
+    T("Rotate secrets: API keys, private keys and MCP tokens that appeared in transcripts or the Cowork disk were already sent, even if deleted locally."),
+    T("Time Machine: use \"Delete All Backups of\" on the directories above; list local snapshots with `tmutil listlocalsnapshots /`, delete with `tmutil deletelocalsnapshots <date>`."),
+    T("iCloud Drive / cloud sync: make sure ~/.claude, project .claude folders and backup archives are not synced."),
+    T("System Settings > General > Login Items & Extensions: confirm Claude / ShipIt is gone."),
+    T("git: local `claude` branches (git branch -D claude) and \"Co-Authored-By: Claude\" trailers (rewrite only unpushed repos with git filter-repo)."),
+    T("Spotlight: after cleaning, rebuild the index with `sudo mdutil -E /`."),
+    T("Finally: empty the Trash; this tool's backups/ and reports/ folders contain every fingerprint too, encrypt or delete them."),
+]
+
+# ───────────────────────── path resolution & sizes ─────────────────────────
+def expand(pattern):
+    return os.path.expanduser(pattern)
+
+
+def matches(pattern):
+    p = expand(pattern)
+    if any(ch in p for ch in "*?["):
+        return sorted(glob.glob(p))
+    return [p] if os.path.lexists(p) else []
+
+
+_size_cache = {}
+
+
+def du(path):
+    if path in _size_cache:
+        return _size_cache[path]
+    total = 0
+    try:
+        st = os.lstat(path)
+        total = st.st_blocks * 512
+        if os.path.isdir(path) and not os.path.islink(path):
+            for root, dirs, files in os.walk(path, onerror=lambda e: None):
+                for n in dirs + files:
+                    try:
+                        total += os.lstat(os.path.join(root, n)).st_blocks * 512
+                    except OSError:
+                        pass
+    except OSError:
+        pass
+    _size_cache[path] = total
+    return total
+
+
+def launchagent_hits(it):
+    hits = []
+    for f in matches(it["paths"][0]):
+        try:
+            data = open(f, "rb").read().lower()
+        except OSError:
+            continue
+        if any(k in data for k in KEYWORDS):
+            hits.append(f)
+    return hits
+
+
+def history_entries(data):
+    lines = data.split(b"\n")
+    ext = re.compile(rb"^: \d+:\d+;")
+    if not any(ext.match(l) for l in lines[:50]):
+        return [[l] for l in lines]
+    entries, cur = [], []
+    for l in lines:
+        if ext.match(l) and cur:
+            entries.append(cur)
+            cur = []
+        cur.append(l)
+    if cur:
+        entries.append(cur)
+    return entries
+
+
+def entry_hit(entry):
+    blob = b"\n".join(entry).lower()
+    return any(k in blob for k in KEYWORDS)
+
+
+def chrome_profiles():
+    out = []
+    for bname, (root, proc) in BROWSER_ROOTS.items():
+        r = expand(root)
+        if not os.path.isdir(r):
+            continue
+        for d in sorted(os.listdir(r)):
+            pdir = os.path.join(r, d)
+            if (d == "Default" or d.startswith("Profile ")) and os.path.isdir(pdir):
+                out.append((bname, proc, d, pdir))
+    return out
+
+
+def domain_where(col):
+    parts = []
+    for d in DOMAINS:
+        parts.append("%s LIKE '%%%s%%'" % (col, d))
+    return "(" + " OR ".join(parts) + ")"
+
+
+def cookie_where():
+    parts = []
+    for d in DOMAINS:
+        parts.append("host_key = '%s' OR host_key = '.%s' OR host_key LIKE '%%.%s'" % (d, d, d))
+    return "(" + " OR ".join(parts) + ")"
+
+
+def chrome_db_files(pdir):
+    cookies = [p for p in (os.path.join(pdir, "Network", "Cookies"), os.path.join(pdir, "Cookies"))
+               if os.path.exists(p)]
+    hist = os.path.join(pdir, "History")
+    login = os.path.join(pdir, "Login Data")
+    return cookies, (hist if os.path.exists(hist) else None), (login if os.path.exists(login) else None)
+
+
+def ro_count(db, sql):
+    try:
+        con = sqlite3.connect("file:%s?immutable=1" % urllib.parse.quote(db), uri=True)
+        n = con.execute(sql).fetchone()[0]
+        con.close()
+        return n
+    except sqlite3.Error:
+        return 0
+
+
+def chrome_indexeddb(pdir):
+    out = []
+    for sub in ("IndexedDB", "Service Worker/CacheStorage"):
+        for d in DOMAINS:
+            out += glob.glob(os.path.join(pdir, sub, "*%s*" % d))
+    return out
+
+
+def repo_hits():
+    hits = []
+    for root in SETTINGS["repo_roots"]:
+        r = expand(root)
+        if not os.path.isdir(r):
+            continue
+        base_depth = r.rstrip("/").count("/")
+        for cur, dirs, files in os.walk(r):
+            dirs[:] = [d for d in dirs if d not in ("node_modules", ".git", "Pods", "build", ".venv", "venv")]
+            if cur.count("/") - base_depth >= 6:
+                dirs[:] = []
+            if ".claude" in dirs:
+                hits.append(os.path.join(cur, ".claude"))
+                dirs.remove(".claude")
+            for f in ("CLAUDE.md", "CLAUDE.local.md", ".mcp.json"):
+                if f in files:
+                    hits.append(os.path.join(cur, f))
+    return hits
+
+
+def keychain_present(it):
+    found = []
+    for s in it.get("generic_services", []):
+        if run(["security", "find-generic-password", "-s", s])[0] == 0:
+            found.append(("generic-s", s))
+    for a in it.get("generic_accounts", []):
+        if run(["security", "find-generic-password", "-a", a])[0] == 0:
+            found.append(("generic-a", a))
+    for s in it.get("internet_servers", []):
+        if run(["security", "find-internet-password", "-s", s])[0] == 0:
+            found.append(("internet", s))
+    return found
+
+
+def resolve(it):
+    """Return (targets, total_bytes, detail_lines). Targets are paths that can be backed up."""
+    k = it["kind"]
+    if k in ("path", "prefs"):
+        targets = []
+        for pat in it["paths"]:
+            targets += matches(pat)
+        return targets, sum(du(t) for t in targets), []
+    if k == "launchagent":
+        t = launchagent_hits(it)
+        return t, sum(du(x) for x in t), []
+    if k == "history":
+        targets, desc = [], []
+        for pat in it["paths"]:
+            for f in matches(pat):
+                try:
+                    n = sum(1 for e in history_entries(open(f, "rb").read()) if entry_hit(e))
+                except OSError:
+                    n = 0
+                if n:
+                    targets.append(f)
+                    desc.append(T("%s: %d matching entries") % (f.replace(HOME, "~"), n))
+        return targets, 0, desc
+    if k in ("report_rc", "report_grep"):
+        desc = []
+        for pat in it["paths"]:
+            for f in matches(pat):
+                try:
+                    for i, line in enumerate(open(f, "r", errors="replace"), 1):
+                        if re.search(r"claude|anthropic", line, re.I):
+                            desc.append("%s:%d  %s" % (f.replace(HOME, "~"), i, line.strip()[:120]))
+                except OSError:
+                    pass
+        return [], 0, desc
+    if k == "keychain":
+        found = keychain_present(it)
+        return [], 0, [T("%s: %s") % (t, v) for t, v in found]
+    if k == "chrome":
+        targets, desc = [], []
+        for bname, proc, prof, pdir in chrome_profiles():
+            cookies, hist, login = chrome_db_files(pdir)
+            nc = sum(ro_count(db, "SELECT COUNT(*) FROM cookies WHERE " + cookie_where()) for db in cookies)
+            nh = ro_count(hist, "SELECT COUNT(*) FROM urls WHERE " + domain_where("url")) if hist else 0
+            nl = ro_count(login, "SELECT COUNT(*) FROM logins WHERE " + domain_where("origin_url")) if login else 0
+            idb = chrome_indexeddb(pdir)
+            if nc or nh or nl or idb:
+                desc.append(T("%s/%s: %d cookies, %d history URLs, %d saved passwords, %d site storage dirs")
+                            % (bname, prof, nc, nh, nl, len(idb)))
+                targets += cookies + [x for x in (hist, login) if x] + idb
+        return targets, sum(du(t) for t in targets), desc
+    if k == "repo":
+        t = repo_hits()
+        return t, sum(du(x) for x in t), [x.replace(HOME, "~") for x in t]
+    return [], 0, []
+
+
+def has_content(it, targets, desc):
+    return bool(targets or desc)
+
+# ───────────────────────── selection ─────────────────────────
+PRESETS = [
+    ("privacy", T("Privacy clean: identity, sessions, telemetry, cookies, Cowork VM, etc.; keeps the apps (sign in again afterwards)"),
+     lambda it: it["cat"] in "ABCDEHIJ" or it["id"] == "F1"),
+    ("uninstall", T("Full uninstall: everything above + apps, config, plugins, third-party leftovers (repo files still confirmed one by one)"),
+     lambda it: True),
+    ("high", T("High-risk items only"), lambda it: it["level"] == 1),
+    ("high_mid", T("High + medium-risk items"), lambda it: it["level"] <= 2),
+]
+
+
+def print_catalog(items=None, scan=None):
+    items = items or ITEMS
+    cur = None
+    for it in items:
+        if it["cat"] != cur:
+            cur = it["cat"]
+            print("\n" + BOLD("[%s] %s" % (cur, CAT_NAME[cur])))
+        line = "  %-3s %s  %s" % (it["id"], LEVEL_NAME[it["level"]], it["name"])
+        if scan is not None:
+            targets, size, desc = scan[it["id"]]
+            if has_content(it, targets, desc):
+                extra = []
+                if targets:
+                    extra.append(T("%d paths") % len(targets))
+                if size:
+                    extra.append(human(size))
+                if desc and not targets:
+                    extra.append(T("%d hits") % len(desc))
+                line += "  " + GREEN("● " + ", ".join(extra))
+            else:
+                line += "  " + DIM(T("○ not found"))
+        print(line)
+        if it.get("note"):
+            print("        " + DIM(it["note"]))
+
+
+def scan_all(items=None):
+    items = items or ITEMS
+    res = {}
+    total = len(items)
+    tty = sys.stderr.isatty()
+    for i, it in enumerate(items, 1):
+        if tty:
+            sys.stderr.write(T("\r\033[KScanning %d/%d  %s") % (i, total, it["name"][:40]))
+            sys.stderr.flush()
+        res[it["id"]] = resolve(it)
+    if tty:
+        sys.stderr.write("\r\033[K")
+    return res
+
+
+def select_items():
+    print(BOLD(T("\nChoose a scope:")))
+    for i, (_, label, _) in enumerate(PRESETS, 1):
+        print("  %d. %s" % (i, label))
+    print(T("  5. By category (e.g. A,B,D)"))
+    print(T("  6. By item ID (e.g. A1,A3,D1)"))
+    print(T("  0. Back"))
+    s = ask("> ")
+    if s in ("1", "2", "3", "4"):
+        f = PRESETS[int(s) - 1][2]
+        chosen = [it for it in ITEMS if f(it) and not it.get("explicit")]
+    elif s == "5":
+        print("  " + "  ".join("%s=%s" % (k, v) for k, v in CATEGORIES))
+        cats = set(split_list(ask(T("Categories> "))))
+        chosen = [it for it in ITEMS if it["cat"] in cats]
+    elif s == "6":
+        print_catalog()
+        ids = set(split_list(ask(T("\nItem IDs> "))))
+        chosen = [it for it in ITEMS if it["id"] in ids]
+    else:
+        return []
+    if not chosen:
+        print(YELLOW(T("Nothing selected.")))
+        return []
+    print(BOLD(T("\n%d items selected:") % len(chosen)))
+    print_catalog(chosen)
+    ex = set(split_list(ask(T("\nIDs to exclude (Enter to skip)> "))))
+    return [it for it in chosen if it["id"] not in ex]
+
+# ───────────────────────── backup ─────────────────────────
+def dedupe(paths):
+    paths = sorted(set(os.path.abspath(p) for p in paths))
+    out = []
+    for p in paths:
+        if out and (p == out[-1] or p.startswith(out[-1].rstrip("/") + "/")):
+            continue
+        out.append(p)
+    return out
+
+
+def keychain_metadata(it):
+    lines = []
+    for t, v in keychain_present(it):
+        if t == "generic-s":
+            cmd = ["security", "find-generic-password", "-s", v]
+        elif t == "generic-a":
+            cmd = ["security", "find-generic-password", "-a", v]
+        else:
+            cmd = ["security", "find-internet-password", "-s", v]
+        lines.append("$ " + " ".join(cmd) + "\n" + run(cmd)[1])
+    return "\n".join(lines)
+
+
+def do_backup(items, scan=None):
+    scan = scan or scan_all(items)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = os.path.join(BACKUP_ROOT, ts)
+
+    by_cat, sizes = {}, {}
+    for it in items:
+        targets, size, _ = scan[it["id"]]
+        if not targets:
+            continue
+        if size > BIG_ITEM:
+            if SETTINGS["assume_yes"] and not SETTINGS["include_big"]:
+                log(T("Skipping large item %s (%s); add --include-big to include it") % (it["id"], human(size)))
+                continue
+            if not SETTINGS["assume_yes"] and not confirm(T("%s %s is %s. Include it in the backup?") % (it["id"], it["name"], human(size)), False):
+                log(T("Skipping large item %s") % it["id"])
+                continue
+        by_cat.setdefault(it["cat"], []).extend(targets)
+        sizes[it["cat"]] = sizes.get(it["cat"], 0) + size
+
+    kc = [it for it in items if it["kind"] == "keychain"]
+    if not by_cat and not kc:
+        print(YELLOW(T("None of the selected items exist on this Mac; nothing to back up.")))
+        return None
+
+    print(BOLD(T("\nBackup plan (destination: %s)") % dest.replace(HOME, "~")))
+    for cat, ps in sorted(by_cat.items()):
+        print(T("  [%s] %s: %d paths, about %s") % (cat, CAT_NAME[cat], len(dedupe(ps)), human(sizes.get(cat, 0))))
+    if kc:
+        print(T("  Keychain: entry metadata only"))
+    total = sum(sizes.values())
+    free = shutil.disk_usage(TOOL_DIR).free
+    print(T("  Total about %s before compression, %s free on disk") % (human(total), human(free)))
+    if total > free * 0.9:
+        print(RED(T("Disk space may be insufficient.")))
+    if not confirm(T("Start the backup?"), True):
+        return None
+
+    os.makedirs(dest, exist_ok=True)
+    manifest = {"created": ts, "host_user": getpass.getuser(), "archives": {}}
+    for cat, ps in sorted(by_cat.items()):
+        paths = dedupe(ps)
+        sudo = any(not os.access(p, os.R_OK) for p in paths)
+        archive = os.path.join(dest, "%s_%s.tar.gz" % (cat, re.sub(r"[^\w]+", "_", CAT_NAME[cat])[:30].strip("_")))
+        listfile = archive + ".list"
+        with open(listfile, "w", encoding="utf-8") as f:
+            for p in paths:
+                f.write(p.lstrip("/") + "\n")
+        print(T("  Archiving [%s] %s ...") % (cat, CAT_NAME[cat]))
+        rc, out = run(["tar", "-czf", archive, "-C", "/", "-T", listfile], sudo=sudo)
+        manifest["archives"][os.path.basename(archive)] = {"category": CAT_NAME[cat], "paths": paths,
+                                                          "tar_rc": rc}
+        if rc != 0:
+            log(YELLOW(T("  [%s] tar exited with %d (some files may be unreadable or in use); archived what it could") % (cat, rc)))
+        os.remove(listfile)
+    for it in kc:
+        with open(os.path.join(dest, "keychain_metadata.txt"), "w", encoding="utf-8") as f:
+            f.write(keychain_metadata(it) or T("(no entries found)\n"))
+    with open(os.path.join(dest, "manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    with open(os.path.join(dest, "HOW_TO_RESTORE.txt"), "w", encoding="utf-8") as f:
+        f.write(T("Every tar.gz stores absolute paths relative to the root directory /.\n"
+                "Restore everything:   cd <this folder> && for a in *.tar.gz; do tar -xzf \"$a\" -C /; done\n"
+                "List contents:        tar -tzf A_xxx.tar.gz\n"
+                "Restore one path:     tar -xzf A_xxx.tar.gz -C / Users/<your-user>/.claude.json\n"
+                "Note: restoring a Chrome database overwrites all cookies / history of that browser; quit it first.\n"
+                "Keychain secrets were not exported; you will need to sign in again after restoring.\n"))
+    os.chmod(dest, 0o700)
+    for n in os.listdir(dest):
+        os.chmod(os.path.join(dest, n), 0o600)
+    log(GREEN(T("Backup finished: %s (%s)") % (dest, human(du(dest)))))
+
+    if SETTINGS["dmg"] and confirm(T("Pack the backup into an AES-256 encrypted DMG (you will be asked for a password)?"), True):
+        dmg = dest + ".dmg"
+        rc, _ = run(["hdiutil", "create", "-encryption", "AES-256", "-srcfolder", dest,
+                     "-volname", "claude-backup-" + ts, dmg], capture=False)
+        if rc == 0 and os.path.exists(dmg):
+            log(GREEN(T("Encrypted DMG: %s") % dmg))
+            if confirm(T("Delete the unencrypted backup folder?"), True):
+                shutil.rmtree(dest, ignore_errors=True)
+                log(T("Deleted plaintext backup folder %s") % dest)
+                return dmg
+        else:
+            log(YELLOW(T("DMG creation failed; the plaintext backup remains at %s") % dest))
+    return dest
+
+# ───────────────────────── clean ─────────────────────────
+def remove_path(p, sudo=False):
+    if SETTINGS["dry_run"]:
+        log(T("  [dry run] delete %s") % p)
+        return True
+    try:
+        if sudo:
+            rc, _ = run(["rm", "-rf", p], sudo=True, capture=False)
+            ok = rc == 0
+        elif SETTINGS["delete_mode"] == "trash" and not p.startswith("/Library/"):
+            trash = os.path.join(HOME, ".Trash")
+            base = os.path.basename(p.rstrip("/"))
+            dst = os.path.join(trash, base)
+            if os.path.lexists(dst):
+                dst = os.path.join(trash, "%s_%s" % (base, datetime.datetime.now().strftime("%H%M%S%f")))
+            shutil.move(p, dst)
+            ok = True
+        else:
+            if os.path.isdir(p) and not os.path.islink(p):
+                shutil.rmtree(p)
+            else:
+                os.remove(p)
+            ok = True
+    except Exception as e:
+        log(RED(T("  FAILED %s: %s") % (p, e)))
+        return False
+    log((T("  deleted ") if ok else RED(T("  FAILED "))) + p.replace(HOME, "~"))
+    return ok
+
+
+def clean_keychain(it):
+    for t, v in keychain_present(it):
+        flag = {"generic-s": ("find-generic-password", "delete-generic-password", "-s"),
+                "generic-a": ("find-generic-password", "delete-generic-password", "-a"),
+                "internet": ("find-internet-password", "delete-internet-password", "-s")}[t]
+        if SETTINGS["dry_run"]:
+            log(T("  [dry run] delete keychain entry %s %s") % (t, v))
+            continue
+        for _ in range(20):
+            if run(["security", flag[0], flag[2], v])[0] != 0:
+                break
+            run(["security", flag[1], flag[2], v])
+        log(T("  deleted keychain entry %s %s") % (t, v))
+    if SETTINGS["dry_run"]:
+        return
+    rc, out = run(["security", "dump-keychain"])
+    left = [l.strip() for l in out.splitlines() if re.search(r"claude|anthropic", l, re.I)]
+    if left:
+        print(YELLOW(T("  The keychain still has matches (search in Keychain Access and delete manually):")))
+        for l in left[:20]:
+            print("    " + l)
+
+
+def clean_history(f):
+    data = open(f, "rb").read()
+    entries = history_entries(data)
+    keep = [e for e in entries if not entry_hit(e)]
+    n = len(entries) - len(keep)
+    if SETTINGS["dry_run"]:
+        log(T("  [dry run] %s: remove %d entries") % (f, n))
+        return
+    tmp = f + ".cfd_tmp"
+    with open(tmp, "wb") as fp:
+        fp.write(b"\n".join(b"\n".join(e) for e in keep))
+    os.chmod(tmp, os.stat(f).st_mode & 0o777)
+    os.replace(tmp, f)
+    log(T("  %s: removed %d commands") % (f.replace(HOME, "~"), n))
+
+
+def proc_running(name):
+    return run(["pgrep", "-x", name])[0] == 0
+
+
+def clean_chrome():
+    import time
+    for bname, proc, prof, pdir in chrome_profiles():
+        cookies, hist, login = chrome_db_files(pdir)
+        idb = chrome_indexeddb(pdir)
+        if not (cookies or hist or login or idb):
+            continue
+        if proc_running(proc):
+            if not confirm(T("  %s is running and must quit before its databases can be changed. Quit it now?") % bname, False):
+                log(YELLOW(T("  skipped %s/%s") % (bname, prof)))
+                continue
+            run(["osascript", "-e", 'quit app "%s"' % proc])
+            for _ in range(20):
+                if not proc_running(proc):
+                    break
+                time.sleep(0.5)
+        if SETTINGS["dry_run"]:
+            log(T("  [dry run] clean databases and site storage of %s/%s") % (bname, prof))
+            continue
+        stmts = []
+        for db in cookies:
+            stmts.append((db, ["DELETE FROM cookies WHERE " + cookie_where()]))
+        if hist:
+            ids = "SELECT id FROM urls WHERE " + domain_where("url")
+            stmts.append((hist, [
+                "DELETE FROM visits WHERE url IN (%s)" % ids,
+                "DELETE FROM keyword_search_terms WHERE url_id IN (%s) OR lower_term LIKE '%%claude%%' "
+                "OR lower_term LIKE '%%anthropic%%'" % ids,
+                "DELETE FROM segments WHERE url_id IN (%s)" % ids,
+                "DELETE FROM urls WHERE " + domain_where("url"),
+            ]))
+        if login:
+            stmts.append((login, ["DELETE FROM logins WHERE " + domain_where("origin_url")]))
+        for db, sqls in stmts:
+            try:
+                con = sqlite3.connect(db, timeout=5)
+                n = 0
+                for s in sqls:
+                    try:
+                        n += con.execute(s).rowcount
+                    except sqlite3.Error:
+                        pass
+                con.commit()
+                con.execute("VACUUM")
+                con.close()
+                log(T("  %s/%s %s: deleted %d rows") % (bname, prof, os.path.basename(db), n))
+            except sqlite3.Error as e:
+                log(RED(T("  failed to modify %s: %s") % (db, e)))
+        for d in idb:
+            remove_path(d)
+
+
+def clean_launchagents(it):
+    uid = str(os.getuid())
+    for f in launchagent_hits(it):
+        print("  " + f)
+        if SETTINGS["assume_yes"]:
+            log(YELLOW(T("  skipped (--yes never removes launch agents; run without --yes to confirm): %s") % f))
+            continue
+        if not confirm(T("  Unload and delete this launch agent?"), False):
+            continue
+        if not SETTINGS["dry_run"]:
+            run(["launchctl", "bootout", "gui/" + uid, f])
+        remove_path(f)
+
+
+def clean_repo(targets):
+    if SETTINGS["assume_yes"]:
+        log(YELLOW(T("  skipped %d project files (--yes never removes them; run without --yes to confirm each)") % len(targets)))
+        return
+    print(YELLOW(T("  Confirm each: y=delete  n=keep  a=delete all remaining  q=stop")))
+    all_yes = False
+    for p in targets:
+        if not all_yes:
+            s = ask("  %s  (%s) [y/n/a/q] " % (p.replace(HOME, "~"), human(du(p)))).lower()
+            if s == "q":
+                break
+            if s == "a":
+                all_yes = True
+            elif s != "y":
+                continue
+        remove_path(p)
+
+
+def claude_processes():
+    """Match on the executable path so shells whose arguments merely mention "claude" are ignored."""
+    rc, out = run(["ps", "-axo", "pid=,comm="])
+    res = []
+    for l in out.splitlines():
+        parts = l.strip().split(None, 1)
+        if len(parts) == 2 and re.search(r"(?i)claude|anthropic", parts[1]) and not parts[1].startswith(TOOL_DIR):
+            res.append("%s %s" % (parts[0], parts[1]))
+    return res
+
+
+def stop_processes():
+    lines = claude_processes()
+    if not lines:
+        return
+    print(YELLOW(T("\nClaude-related processes are running (if left running they will write the files back):")))
+    for l in lines[:15]:
+        print("  " + l[:150])
+    if confirm(T("Quit these processes now?"), True) and not SETTINGS["dry_run"]:
+        run(["osascript", "-e", 'quit app "Claude"'])
+        run(["pkill", "-f", "Claude.app"])
+        run(["pkill", "-x", "claude"])
+        run(["launchctl", "remove", "com.anthropic.claudefordesktop.ShipIt"])
+        log(T("Attempted to quit Claude-related processes"))
+
+
+def do_clean(items, scan=None):
+    scan = scan or scan_all(items)
+    todo = [it for it in items if has_content(it, scan[it["id"]][0], scan[it["id"]][2])]
+    if not todo:
+        print(GREEN(T("None of the selected items exist on this Mac; nothing to clean.")))
+        return
+    todo.sort(key=lambda it: (bool(it.get("last")), it["id"]))
+
+    print(BOLD(T("\nClean preview:")) + ("  " + YELLOW(T("[DRY RUN]")) if SETTINGS["dry_run"] else ""))
+    total = 0
+    for it in todo:
+        targets, size, desc = scan[it["id"]]
+        total += size
+        print("\n  %s %s  %s  %s" % (it["id"], LEVEL_NAME[it["level"]], it["name"], human(size) if size else ""))
+        for t in targets[:8]:
+            print("      " + DIM(t.replace(HOME, "~")))
+        if len(targets) > 8:
+            print("      " + DIM(T("... and %d more") % (len(targets) - 8)))
+        for d in desc[:8]:
+            print("      " + DIM(d))
+    mode = T("move to Trash") if SETTINGS["delete_mode"] == "trash" else T("delete permanently (cannot be undone)")
+    print(T("\nTotal about %s, deletion mode: %s") % (human(total), mode))
+
+    if not SETTINGS["assume_yes"]:
+        print(BOLD(T("\nConfirmation mode:")))
+        print(T("  1. Per category   2. Per item   3. Everything at once   0. Cancel"))
+    how = "3" if SETTINGS["assume_yes"] else ask("> ", "1")
+    if how not in ("1", "2", "3"):
+        return
+    if how == "3" and not SETTINGS["dry_run"] and not SETTINGS["assume_yes"]:
+        if ask(RED(T("Type DELETE to clean everything: "))) != "DELETE":
+            print(T("Cancelled."))
+            return
+
+    stop_processes()
+    log(BOLD(T("Cleaning started (%s)") % (T("dry run") if SETTINGS["dry_run"] else mode)))
+    asked_cat = {}
+    for it in todo:
+        if how == "1":
+            if it["cat"] not in asked_cat:
+                asked_cat[it["cat"]] = confirm(T("\nProcess category [%s] %s?") % (it["cat"], CAT_NAME[it["cat"]]), True)
+            if not asked_cat[it["cat"]]:
+                continue
+        elif how == "2":
+            if not confirm(T("\n%s %s?") % (it["id"], it["name"]), True):
+                continue
+        targets, _, desc = scan[it["id"]]
+        log(CYAN("▶ %s %s" % (it["id"], it["name"])))
+        k = it["kind"]
+        if k == "path":
+            for t in targets:
+                if os.path.lexists(t):
+                    remove_path(t, sudo=it["sudo"])
+        elif k == "prefs":
+            for t in targets:
+                remove_path(t)
+            if not SETTINGS["dry_run"]:
+                run(["defaults", "delete", "com.anthropic.claudefordesktop"])
+                run(["killall", "cfprefsd"])
+        elif k == "keychain":
+            clean_keychain(it)
+        elif k == "history":
+            for f in targets:
+                clean_history(f)
+            print(YELLOW(T("  Note: close every terminal window and reopen; otherwise running shells write their in-memory history back on exit.")))
+        elif k == "chrome":
+            clean_chrome()
+        elif k == "launchagent":
+            clean_launchagents(it)
+        elif k == "repo":
+            clean_repo(targets)
+        elif k in ("report_rc", "report_grep"):
+            print(YELLOW(T("  These locations need manual editing:")))
+            for d in desc:
+                print("    " + d)
+    _size_cache.clear()
+    log(GREEN(T("Cleaning finished. Run \"verify\" next and review the manual checklist.")))
+
+# ───────────────────────── verify ─────────────────────────
+def do_verify():
+    _size_cache.clear()
+    scan = scan_all()
+    left = [it for it in ITEMS if has_content(it, scan[it["id"]][0], scan[it["id"]][2])]
+    if not left:
+        log(GREEN(T("Verification passed: no leftovers at any known risk location.")))
+    else:
+        log(YELLOW(T("%d items still have leftovers:") % len(left)))
+        print_catalog(left, scan)
+    rc, out = run(["security", "dump-keychain"])
+    n = len([l for l in out.splitlines() if re.search(r"claude|anthropic", l, re.I)])
+    print(T("\nKeychain matching lines: %d") % n)
+    procs = claude_processes()
+    print(T("Running Claude-related processes: %d") % len(procs))
+    for l in procs[:10]:
+        print("  " + l[:150])
+    print(DIM(T("Time Machine local snapshots (handle manually):")))
+    print("  " + (run(["tmutil", "listlocalsnapshots", "/"])[1].strip() or T("none")).replace("\n", "\n  "))
+
+# ───────────────────────── menus ─────────────────────────
+def show_manual():
+    print(BOLD(T("\nManual steps (things this tool cannot do locally):")))
+    for i, t in enumerate(MANUAL_TODO, 1):
+        print("  %2d. %s" % (i, t))
+    branches = []
+    for root in SETTINGS["repo_roots"]:
+        r = expand(root)
+        if not os.path.isdir(r):
+            continue
+        for cur, dirs, files in os.walk(r):
+            dirs[:] = [d for d in dirs if d not in ("node_modules", "Pods", "build")]
+            if ".git" in dirs:
+                rc, out = run(["git", "-C", cur, "branch", "--list", "*claude*"])
+                if out.strip():
+                    branches.append(T("%s: %s") % (cur.replace(HOME, "~"), " ".join(out.split())))
+                dirs.remove(".git")
+            if cur.count("/") - r.count("/") >= 4:
+                dirs[:] = []
+    if branches:
+        print(BOLD(T("\nLocal git branches whose name contains \"claude\":")))
+        for b in branches:
+            print("  " + b)
+
+
+def settings_menu():
+    while True:
+        print(BOLD(T("\nSettings:")))
+        print(T("  1. Dry run (show only, delete nothing): %s") % (GREEN(T("ON")) if SETTINGS["dry_run"] else T("off")))
+        print(T("  2. Deletion mode: %s") % (T("move to Trash") if SETTINGS["delete_mode"] == "trash" else RED(T("delete permanently"))))
+        print(T("  3. Project scan roots: %s") % ", ".join(SETTINGS["repo_roots"]))
+        print(T("  4. Language: %s") % i18n.label())
+        print(T("  0. Back"))
+        s = ask("> ")
+        if _stdin_closed:
+            return
+        if s == "1":
+            SETTINGS["dry_run"] = not SETTINGS["dry_run"]
+        elif s == "2":
+            SETTINGS["delete_mode"] = "rm" if SETTINGS["delete_mode"] == "trash" else "trash"
+        elif s == "3":
+            v = ask(T("Comma-separated directories> "))
+            if v:
+                SETTINGS["repo_roots"] = [x.strip() for x in v.replace(FULLWIDTH_COMMA, ",").split(",") if x.strip()]
+        elif s == "4":
+            switch_language()
+        else:
+            return
+
+
+def switch_language():
+    """Item names and menus are translated at startup, so restart the menu in the other language."""
+    new = "en" if i18n.LANG == "zh" else "zh"
+    env = dict(os.environ, CFD_SETTINGS=json.dumps(SETTINGS))
+    script = os.path.abspath(__file__)
+    os.execve(sys.executable, [sys.executable, script, "--lang", new], env)
+
+
+def backup_then_clean(items, scan):
+    if not SETTINGS["dry_run"] and confirm(T("Back up these items before cleaning?"), True):
+        if do_backup(items, scan) is None and not confirm(T("No backup was created. Continue cleaning anyway?"), False):
+            return
+    do_clean(items, scan)
+
+
+def do_health():
+    import health_check
+    print(BOLD(T("\nCheck mode:")))
+    print(T("  1. Fingerprint check: account / device IDs, tracking cookies, reported device profile, behavior, reporting switches (about 3-4 min)"))
+    print(T("  2. Fingerprint check + extras: credentials, secret leaks in sessions (quick), external traces, system protection (about 6 min)"))
+    print(T("  3. Fingerprint check + extras (deep): secret scan includes the Cowork data disk (about 10 min)"))
+    print(T("  0. Back"))
+    s = ask("> ", "1")
+    mode = {"1": "fp", "2": "fp+extra", "3": "fp+extra_deep"}.get(s)
+    if not mode:
+        return
+    ids, _ = health_check.run(sys.modules[__name__], mode)
+    if not ids:
+        return
+    print(BOLD(T("\nCleanup items matching the findings:")) + " " + ", ".join(ids))
+    if not confirm(T("Start cleaning based on these findings (asks about backup first, then confirms each step)?"), False):
+        return
+    chosen = sorted((ITEM_BY_ID[i] for i in ids), key=lambda it: it["id"])
+    print_catalog(chosen)
+    ex = set(split_list(ask(T("\nIDs to exclude (Enter to skip)> "))))
+    chosen = [it for it in chosen if it["id"] not in ex]
+    if chosen:
+        backup_then_clean(chosen, scan_all(chosen))
+
+
+def do_scan_menu():
+    scan = scan_all()
+    print_catalog(scan=scan)
+    if confirm(T("\nShow the paths of one item?"), False):
+        iid = ask(T("Item ID> ")).upper()
+        if iid in scan:
+            t, size, desc = scan[iid]
+            for x in t:
+                print("  %s  %s" % (human(du(x)).rjust(7), x.replace(HOME, "~")))
+            for d in desc:
+                print("  " + d)
+
+
+def main():
+    if sys.platform != "darwin":
+        print(T("This tool only supports macOS."))
+        return
+    try:
+        SETTINGS.update(json.loads(os.environ.pop("CFD_SETTINGS", "") or "{}"))
+    except ValueError:
+        pass
+    print(BOLD(CYAN(T("\nClaude local traces · fingerprint check, backup & clean"))))
+    print(DIM(T("Tool folder: %s") % TOOL_DIR.replace(HOME, "~")))
+    print(DIM(T("Logs go to logs/, reports to reports/, backups to backups/ (all contain fingerprint data; keep them safe).")))
+    while True:
+        print(BOLD(T("\nMain menu")) + ("  " + YELLOW(T("[DRY RUN]")) if SETTINGS["dry_run"] else ""))
+        print(T("  1. Fingerprint check: account / device IDs, tracking cookies, device profile (optional secret scan)"))
+        print(T("  2. Scan: list every risk location and its size"))
+        print(T("  3. Backup: choose by level / category and archive"))
+        print(T("  4. Clean: choose by level / category, confirm, delete"))
+        print(T("  5. All-in-one: choose -> backup -> clean -> verify"))
+        print(T("  6. Verify: look for leftovers"))
+        print(T("  7. Manual checklist (browser extension, phone, Time Machine, secret rotation...)"))
+        print(T("  8. Settings (dry run / deletion mode / project roots / language)"))
+        print(T("  0. Quit"))
+        s = ask("> ")
+        if _stdin_closed:
+            break
+        if s == "1":
+            do_health()
+        elif s == "2":
+            do_scan_menu()
+        elif s == "3":
+            items = select_items()
+            if items:
+                do_backup(items)
+        elif s == "4":
+            items = select_items()
+            if items:
+                backup_then_clean(items, scan_all(items))
+        elif s == "5":
+            items = select_items()
+            if items:
+                scan = scan_all(items)
+                if do_backup(items, scan) is None and not confirm(T("No backup was created. Continue cleaning anyway?"), False):
+                    continue
+                do_clean(items, scan)
+                do_verify()
+                show_manual()
+        elif s == "6":
+            do_verify()
+        elif s == "7":
+            show_manual()
+        elif s == "8":
+            settings_menu()
+        elif s == "0":
+            break
+
+# ───────────────────────── command-line mode ─────────────────────────
+CLI_EPILOG = T("""
+examples:
+  %(prog)s check                     fingerprint check, printed to the terminal
+  %(prog)s check --extra             add credentials / secret leaks / external traces / system protection
+  %(prog)s check --deep --save       deep check, also save a Markdown report to reports/
+  %(prog)s check --json > fp.json    JSON output for scripts
+  %(prog)s scan                      list every risk location and size
+  %(prog)s scan --ids D1,A1 -v       show the paths of specific items
+  %(prog)s list                      list all cleanup item IDs
+  %(prog)s backup --preset privacy   back up a preset (asks about encryption)
+  %(prog)s clean --preset privacy --dry-run      preview a clean, delete nothing
+  %(prog)s clean --ids A1,A2,A4 --backup         back up, then clean specific items (confirm each)
+  %(prog)s clean --preset high --yes --no-dmg    unattended: auto-confirm, no DMG
+  %(prog)s verify                    look for leftovers
+  %(prog)s manual                    manual checklist
+
+Run without arguments for the interactive menu.
+Presets: privacy (keep apps), uninstall (remove everything), high (high risk only), high_mid (high + medium).
+Language: --lang en|zh|auto (default auto: follows the macOS preferred language; CFD_LANG also works).
+""")
+
+
+def pick_items(args):
+    if args.preset:
+        f = dict((k, fn) for k, _, fn in PRESETS)[args.preset]
+        chosen = [it for it in ITEMS if f(it) and not it.get("explicit")]
+    elif args.cats or args.ids:
+        cats, ids = set(split_list(args.cats)), set(split_list(args.ids))
+        chosen = [it for it in ITEMS if it["cat"] in cats or it["id"] in ids]
+    else:
+        return None
+    ex = set(split_list(args.exclude))
+    return [it for it in chosen if it["id"] not in ex]
+
+
+def add_selector(p):
+    g = p.add_argument_group(T("scope (pick one; combine with --exclude)"))
+    g.add_argument("--preset", choices=[k for k, _, _ in PRESETS])
+    g.add_argument("--cats", metavar="A,B", help=T("by category"))
+    g.add_argument("--ids", metavar="A1,D1", help=T("by item ID"))
+    g.add_argument("--exclude", metavar="E2,G1", help=T("item IDs to exclude"))
+
+
+def cli(argv):
+    import argparse
+    ap = argparse.ArgumentParser(prog=os.path.basename(__file__),
+                                 description=T("Claude local fingerprint check, backup and clean (macOS)"),
+                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog=CLI_EPILOG)
+    ap.add_argument("--version", action="version", version="claude-fingerprint-detect " + __version__)
+    ap.add_argument("--lang", choices=["en", "zh", "auto"], help=T("UI language: en, zh or auto (follow macOS)"))
+    sub = ap.add_subparsers(dest="cmd")
+
+    p = sub.add_parser("check", help=T("fingerprint check, printed to the terminal"))
+    p.add_argument("--extra", action="store_true", help=T("extras: credentials, quick secret scan, external traces, system protection"))
+    p.add_argument("--deep", action="store_true", help=T("extras (deep): secret scan includes the Cowork data disk"))
+    p.add_argument("--json", action="store_true", help=T("JSON output"))
+    p.add_argument("--save", action="store_true", help=T("also save a Markdown report to reports/"))
+
+    p = sub.add_parser("scan", help=T("list risk locations and sizes"))
+    p.add_argument("--ids", metavar="A1,D1", help=T("only scan these item IDs"))
+    p.add_argument("-v", "--verbose", action="store_true", help=T("show paths"))
+    p.add_argument("--json", action="store_true")
+
+    sub.add_parser("list", help=T("list all cleanup item IDs"))
+
+    p = sub.add_parser("backup", help=T("back up the selected items"))
+    add_selector(p)
+    p.add_argument("--yes", action="store_true", help=T("auto-confirm"))
+    p.add_argument("--include-big", action="store_true", help=T("include items larger than 2 GB (e.g. the Cowork VM)"))
+    p.add_argument("--no-dmg", action="store_true", help=T("skip the encrypted DMG"))
+
+    p = sub.add_parser("clean", help=T("clean the selected items"))
+    add_selector(p)
+    p.add_argument("--dry-run", action="store_true", help=T("preview only, delete nothing"))
+    p.add_argument("--backup", action="store_true", help=T("back up before cleaning"))
+    p.add_argument("--rm", action="store_true", help=T("delete permanently (default: move to Trash)"))
+    p.add_argument("--yes", action="store_true", help=T("auto-confirm everything (quits Claude / browser processes; never removes launch agents or project files)"))
+    p.add_argument("--include-big", action="store_true")
+    p.add_argument("--no-dmg", action="store_true")
+    p.add_argument("--repo-root", metavar="DIR", action="append", help=T("project scan root, may be repeated"))
+
+    sub.add_parser("verify", help=T("look for leftovers"))
+    sub.add_parser("manual", help=T("manual checklist"))
+
+    args = ap.parse_args(argv)
+    if not args.cmd:
+        ap.print_help()
+        return 0
+
+    if args.cmd == "check":
+        import health_check
+        mode = "fp+extra_deep" if args.deep else ("fp+extra" if args.extra else "fp")
+        ids, r = health_check.run(sys.modules[__name__], mode, save=args.save, quiet=args.json)
+        if args.json:
+            d = r.to_dict(health_check.MODES[mode])
+            d["cleanup_items"] = ids
+            print(json.dumps(d, ensure_ascii=False, indent=2))
+        else:
+            print(T("\nMatching cleanup items: %s") % (", ".join(ids) or T("none")))
+            if ids:
+                print(DIM(T("Example: python3 %s clean --ids %s --backup --dry-run")
+                          % (os.path.abspath(__file__).replace(HOME, "~"), ",".join(ids))))
+        return 0
+
+    if args.cmd == "scan":
+        items = [ITEM_BY_ID[i] for i in split_list(args.ids) if i in ITEM_BY_ID] or ITEMS
+        scan = scan_all(items)
+        if args.json:
+            out = []
+            for it in items:
+                t, size, desc = scan[it["id"]]
+                out.append({"id": it["id"], "category": CAT_NAME[it["cat"]], "level": it["level"], "name": it["name"],
+                            "found": bool(t or desc), "count": len(t), "bytes": size, "paths": t, "details": desc})
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+            return 0
+        print_catalog(items, scan)
+        if args.verbose:
+            for it in items:
+                t, size, desc = scan[it["id"]]
+                if t or desc:
+                    print("\n" + BOLD("%s %s" % (it["id"], it["name"])))
+                    for x in t:
+                        print("  %s  %s" % (human(du(x)).rjust(7), x.replace(HOME, "~")))
+                    for d in desc:
+                        print("  " + d)
+        found = [it for it in items if scan[it["id"]][0] or scan[it["id"]][2]]
+        print(T("\nFound %d / %d items, %s in total") % (len(found), len(items), human(sum(scan[it["id"]][1] for it in found))))
+        return 0
+
+    if args.cmd == "list":
+        print_catalog()
+        return 0
+
+    if args.cmd == "verify":
+        do_verify()
+        return 0
+
+    if args.cmd == "manual":
+        show_manual()
+        return 0
+
+    items = pick_items(args)
+    if not items:
+        print(RED(T("Specify a scope with --preset / --cats / --ids. Run `list` to see item IDs.")))
+        return 2
+    SETTINGS["assume_yes"] = args.yes
+    SETTINGS["include_big"] = args.include_big
+    SETTINGS["dmg"] = not args.no_dmg
+    print(BOLD(T("%d items selected:") % len(items)) + " " + ", ".join(it["id"] for it in items))
+
+    if args.cmd == "backup":
+        return 0 if do_backup(items) else 1
+
+    if args.cmd == "clean":
+        SETTINGS["dry_run"] = args.dry_run
+        SETTINGS["delete_mode"] = "rm" if args.rm else "trash"
+        if args.repo_root:
+            SETTINGS["repo_roots"] = args.repo_root
+        scan = scan_all(items)
+        if args.backup and not args.dry_run and do_backup(items, scan) is None:
+            if SETTINGS["assume_yes"] or not confirm(T("No backup was created. Continue cleaning anyway?"), False):
+                print(RED(T("Backup did not complete; cleaning stopped.")))
+                return 1
+        do_clean(items, scan)
+        return 0
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        if len(sys.argv) > 1:
+            sys.exit(cli(sys.argv[1:]))
+        main()
+    except KeyboardInterrupt:
+        print(T("\nInterrupted."))
