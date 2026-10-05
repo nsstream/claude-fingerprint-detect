@@ -770,6 +770,8 @@ def do_backup(items, scan=None):
         targets, size, _ = scan[it["id"]]
         if not targets or it.get("last"):
             continue
+        if it["kind"] == "history":
+            size = sum(du(t) for t in targets)
         if not big_ok(it["name"], size):
             skipped += targets
             continue
@@ -1055,7 +1057,8 @@ def do_clean(items, scan=None):
         return
     todo.sort(key=lambda it: (bool(it.get("last")), it["id"]))
 
-    total = sum(du(p) for p in dedupe([t for it in todo for t in scan[it["id"]][0]]))
+    removed = [t for it in todo if it["kind"] not in ("history", "chrome") for t in scan[it["id"]][0]]
+    total = sum(du(p) for p in dedupe(removed))
     cur = None
     for it in sorted(todo, key=lambda it: it["id"]):
         targets, size, desc = scan[it["id"]]
@@ -1063,9 +1066,10 @@ def do_clean(items, scan=None):
             cur = it["cat"]
             heading(CAT_NAME[cur])
         row(RED("✗ ") + it["name"], BOLD(human(size)) if size else "")
-        for t in (targets or desc)[:3]:
+        lines = desc if it["kind"] == "history" else (targets or desc)
+        for t in lines[:3]:
             emit(t.replace(HOME, "~"), 6, color=DIM, hard=True)
-        more = len(targets or desc) - 3
+        more = len(lines) - 3
         if more > 0:
             print("      " + DIM(T("... and %d more") % more))
     mode = T("move to Trash") if SETTINGS["delete_mode"] == "trash" else RED(T("delete permanently (cannot be undone)"))
