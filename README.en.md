@@ -26,7 +26,7 @@ cfd backup   # 2. back up
 cfd clean    # 3. clean (shows what will be removed and asks first)
 ```
 
-Run `cfd` with no arguments for an interactive menu. The interface follows your Mac's language (English or Simplified Chinese).
+After cleaning, run `cfd manual` for what you have to do by hand (browser extension, phone app, rotating leaked keys). Run `cfd` with no arguments for an interactive menu. The interface follows your Mac's language (English or Simplified Chinese).
 
 Using an AI agent? Ask it:
 
@@ -44,13 +44,7 @@ Using an AI agent? Ask it:
 - macOS (Apple silicon or Intel).
 - Nothing else to install. If the installer says Python is missing, run `xcode-select --install` to get the Command Line Tools, then run the install command again.
 
-## Recommended steps
-
-1. `cfd check`. Takes a few seconds. Each finding says why it matters.
-2. `cfd backup`, then `cfd clean`: lists everything that will be removed, cleans after you confirm, then verifies.
-3. `cfd manual` for things the tool cannot do locally (browser extension, phone app, Time Machine, rotating leaked keys).
-
-**Good to know before cleaning**
+## Before you clean
 
 - `clean` removes **everything** Claude left behind, including the apps themselves, and signs you out. Reinstall and log in again if you keep using Claude.
 - If Claude is running, the tool asks to quit it (otherwise it would write the files back).
